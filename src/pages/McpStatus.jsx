@@ -8,8 +8,10 @@ import ProviderCard from '@/components/mcp/ProviderCard';
 
 const PROVIDER_NAMES = ['connecteam', 'qbo', 'hubspot', 'microsoft', 'google'];
 
+const DEFAULT_SERVER_URL = 'https://multi-mcp.gentleplant-1d0fa284.eastus.azurecontainerapps.io';
+
 export default function McpStatus() {
-  const [serverUrl, setServerUrl] = useState(() => localStorage.getItem('mcp_server_url') || '');
+  const [serverUrl, setServerUrl] = useState(() => localStorage.getItem('mcp_server_url') || DEFAULT_SERVER_URL);
   const [urlInput, setUrlInput] = useState(serverUrl);
   const [healthStatus, setHealthStatus] = useState(null);
   const [providerStatus, setProviderStatus] = useState(null);
@@ -115,6 +117,14 @@ export default function McpStatus() {
           </CardHeader>
           <CardContent className="space-y-3">
             <div className="flex gap-2">
+              <select
+                className="shrink-0 rounded-md border border-input bg-background px-3 text-sm h-9"
+                value={urlInput === DEFAULT_SERVER_URL ? DEFAULT_SERVER_URL : ''}
+                onChange={(e) => { setUrlInput(e.target.value); }}
+              >
+                <option value={DEFAULT_SERVER_URL}>Production (East US)</option>
+                <option value="">Custom…</option>
+              </select>
               <Input
                 placeholder="https://your-mcp-server.azurecontainerapps.io"
                 value={urlInput}
