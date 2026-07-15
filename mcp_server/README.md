@@ -80,6 +80,7 @@ The app reads ALL static secrets from environment variables (see `.env.example`)
 | Variable | Description |
 |----------|-------------|
 | `INBOUND_TOKEN` | Static bearer token for inbound MCP auth |
+| `STATUS_TOKEN` | Read-only bearer token for GET /status (separate from INBOUND_TOKEN) |
 | `CONNECTEAM_KEY` | Connecteam API key (sent as `X-API-KEY` header) |
 | `HUBSPOT_MAIN` | HubSpot private-app access token |
 | `QBO_CLIENT_ID` | QuickBooks OAuth client ID |
@@ -289,6 +290,7 @@ az containerapp secret set \
   --resource-group <rg> \
   --secrets \
     INBOUND_TOKEN="keyvault:https://<vault>.vault.azure.net/secrets/INBOUND_TOKEN" \
+    STATUS_TOKEN="keyvault:https://<vault>.vault.azure.net/secrets/STATUS_TOKEN" \
     CONNECTEAM_KEY="keyvault:https://<vault>.vault.azure.net/secrets/CONNECTEAM_KEY" \
     HUBSPOT_MAIN="keyvault:https://<vault>.vault.azure.net/secrets/HUBSPOT_MAIN" \
     QBO_CLIENT_ID="keyvault:https://<vault>.vault.azure.net/secrets/QBO_CLIENT_ID" \
@@ -309,6 +311,7 @@ az containerapp update \
   --resource-group <rg> \
   --set-env-vars \
     INBOUND_TOKEN=secretref:INBOUND_TOKEN \
+    STATUS_TOKEN=secretref:STATUS_TOKEN \
     CONNECTEAM_KEY=secretref:CONNECTEAM_KEY \
     HUBSPOT_MAIN=secretref:HUBSPOT_MAIN \
     QBO_CLIENT_ID=secretref:QBO_CLIENT_ID \
@@ -351,6 +354,69 @@ The `/health` endpoint is EXEMPT from this check (for ACA liveness probes).
 
 To add per-user tokens later, extend `BearerAuthMiddleware` to look up tokens
 from a credential store instead of comparing against a single env var.
+
+---
+
+## Status endpoint (GET /status)
+
+A live provider-status endpoint protected by a **separate read-only token**
+(`STATUS_TOKEN`). This token unlocks ONLY `/status` — never the MCP tools at
+`/mcp`. It is completely independent of `INBOUND_TOKEN`.
+
+### What it returns
+
+For each provider (connecteam, qbo, hubspot, microsoft, google):
+
+| Field | Description |
+|-------|-------------|
+| `configured` | Credentials / registry entry present in env |
+| `seeded` | For OAuth providers: refresh token exists in Table Storage |
+| `reachable` | Result of a lightweight live auth ping |
+| `scopes` | Granted scopes (Google via tokeninfo, Microsoft from JWT `scp`, HubSpot via token-info, QBO fixed, Connecteam `api_key`) |
+| `expires_at` | Token expiry if applicable |
+| `error` | Short message if the ping failed (never leaks secrets) |
+
+Response shape:
+```json
+{
+  "checked_at": "2025-01-15T12:00:00Z",
+  "providers": {
+    "connecteam": {"configured": true, "seeded": true, "reachable": true, "scopes": ["api_key"], "expires_at": null, "error": null},
+    "qbo": {"configured": true, "seeded": true, "reachable": true, "scopes": ["com.intuit.quickbooks.accounting"], "expires_at": "...", "error": null}
+  }
+}
+```
+
+### CORS
+
+The `/status` endpoint includes CORS headers (`Access-Control-Allow-Origin: *`,
+`GET` + `OPTIONS` methods, `Authorization` header) so the status page can call
+it from a different origin.
+
+### Deployment
+
+After adding `STATUS_TOKEN`:
+
+1. **Store in Key Vault** (like the other secrets):
+   ```bash
+   az keyvault secret set --vault-name <vault> --name STATUS_TOKEN --value <your-status-token>
+   ```
+
+2. **Reference it in the container app** (add to the `--secrets` and `--set-env-vars` commands shown in the Deploy section above).
+
+3. **Rebuild and redeploy** the server:
+   ```bash
+   az acr build --registry <registry> --image multi-account-mcp:latest .
+   az containerapp update --name multi-account-mcp --resource-group <rg> \
+     --image <registry>.azurecr.io/multi-account-mcp:latest
+   ```
+
+### curl example
+
+```bash
+curl -H "Authorization: Bearer $STATUS_TOKEN" \
+  https://your-mcp-server.azurecontainerapps.io/status
+```
 
 ---
 

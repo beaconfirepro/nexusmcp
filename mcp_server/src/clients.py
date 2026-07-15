@@ -15,6 +15,7 @@ _clients: dict[str, object] = {}
 _oauth_helper: OAuthHelper | None = None
 _token_store: TokenStore | None = None
 _registry: AccountRegistry | None = None
+_oauth_configs: dict[str, OAuthConfig] = {}
 
 
 def get_client(provider: str):
@@ -38,6 +39,11 @@ def get_oauth_helper() -> OAuthHelper:
     if _oauth_helper is None:
         raise RuntimeError("OAuth helper not initialized. Call init_clients() first.")
     return _oauth_helper
+
+
+def get_oauth_config(provider: str) -> OAuthConfig | None:
+    """Get the OAuth config for a provider (qbo, microsoft, google)."""
+    return _oauth_configs.get(provider)
 
 
 def resolve_account(provider: str, account: str | None) -> str:
@@ -128,6 +134,10 @@ def init_clients(settings: Settings):
         ),
         token_store=_token_store,
     )
+
+    # Expose OAuth configs for the /status endpoint (scope checks, token info)
+    for _p in ("qbo", "microsoft", "google"):
+        _oauth_configs[_p] = _clients[_p]._oauth_config
 
     _registry = AccountRegistry(_token_store)
 

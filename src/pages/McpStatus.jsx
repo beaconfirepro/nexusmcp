@@ -1,55 +1,93 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { Activity, RefreshCw, CheckCircle2, XCircle, Server } from 'lucide-react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { Activity, RefreshCw, CheckCircle2, XCircle, Server, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { base44 } from '@/api/base44Client';
+import ProviderCard from '@/components/mcp/ProviderCard';
 
-const SERVICES = [
-  { name: 'Connecteam', type: 'API Key' },
-  { name: 'QuickBooks Online', type: 'OAuth' },
-  { name: 'HubSpot', type: 'Private App' },
-  { name: 'SharePoint', type: 'Graph OAuth' },
-  { name: 'Outlook Mail', type: 'Graph OAuth' },
-  { name: 'Outlook Calendar', type: 'Graph OAuth' },
-  { name: 'Gmail', type: 'Google OAuth' },
-  { name: 'Google Calendar', type: 'Google OAuth' },
-];
+const PROVIDER_NAMES = ['connecteam', 'qbo', 'hubspot', 'microsoft', 'google'];
 
 export default function McpStatus() {
   const [serverUrl, setServerUrl] = useState(() => localStorage.getItem('mcp_server_url') || '');
   const [urlInput, setUrlInput] = useState(serverUrl);
-  const [status, setStatus] = useState(null);
-  const [loading, setLoading] = useState(false);
+  const [healthStatus, setHealthStatus] = useState(null);
+  const [providerStatus, setProviderStatus] = useState(null);
+  const [loadingHealth, setLoadingHealth] = useState(false);
+  const [loadingStatus, setLoadingStatus] = useState(false);
+  const [statusError, setStatusError] = useState(null);
+  const intervalRef = useRef(null);
 
   const checkHealth = useCallback(async (url) => {
     if (!url) return;
-    setLoading(true);
+    setLoadingHealth(true);
     try {
       const resp = await base44.functions.invoke('mcpHealth', { url });
-      setStatus(resp.data);
+      setHealthStatus(resp.data);
     } catch (err) {
-      setStatus({ healthy: false, message: err.message, checked_at: new Date().toISOString() });
+      setHealthStatus({ healthy: false, message: err.message, checked_at: new Date().toISOString() });
     } finally {
-      setLoading(false);
+      setLoadingHealth(false);
+    }
+  }, []);
+
+  const checkProviderStatus = useCallback(async (url) => {
+    if (!url) return;
+    setLoadingStatus(true);
+    setStatusError(null);
+    try {
+      const resp = await base44.functions.invoke('mcpStatus', { url });
+      const data = resp.data;
+      if (data?.ok === false) {
+        if (data.status === 401) {
+          setStatusError('Invalid or missing STATUS_TOKEN. Verify STATUS_TOKEN is set correctly on the server.');
+        } else {
+          setStatusError(data.error || `Server returned status ${data.status}`);
+        }
+        setProviderStatus(null);
+      } else if (data?.providers) {
+        setProviderStatus(data);
+      } else {
+        setStatusError(data?.error || 'Unexpected response from server.');
+        setProviderStatus(null);
+      }
+    } catch (err) {
+      setStatusError(err.message || 'Failed to reach MCP server.');
+      setProviderStatus(null);
+    } finally {
+      setLoadingStatus(false);
     }
   }, []);
 
   useEffect(() => {
-    if (serverUrl) checkHealth(serverUrl);
-  }, [serverUrl, checkHealth]);
+    if (serverUrl) {
+      checkHealth(serverUrl);
+      checkProviderStatus(serverUrl);
+    }
+  }, [serverUrl, checkHealth, checkProviderStatus]);
+
+  // Auto-refresh provider status every 60s
+  useEffect(() => {
+    if (intervalRef.current) clearInterval(intervalRef.current);
+    if (!serverUrl) return;
+    intervalRef.current = setInterval(() => checkProviderStatus(serverUrl), 60000);
+    return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
+  }, [serverUrl, checkProviderStatus]);
 
   const handleSave = () => {
     const cleaned = urlInput.replace(/\/+$/, '');
     localStorage.setItem('mcp_server_url', cleaned);
     setServerUrl(cleaned);
     checkHealth(cleaned);
+    checkProviderStatus(cleaned);
   };
 
-  const healthy = status?.healthy;
-  const lastChecked = status?.checked_at
-    ? new Date(status.checked_at).toLocaleTimeString()
+  const healthy = healthStatus?.healthy;
+  const lastHealthCheck = healthStatus?.checked_at
+    ? new Date(healthStatus.checked_at).toLocaleTimeString()
     : null;
+  const providers = providerStatus?.providers || {};
+  const providerCheckedAt = providerStatus?.checked_at;
 
   return (
     <div className="min-h-screen bg-background flex items-center justify-center p-4">
@@ -67,7 +105,7 @@ export default function McpStatus() {
           <CardHeader>
             <CardTitle className="flex items-center justify-between">
               <span>Server Connection</span>
-              {status && (
+              {healthStatus && (
                 <span className={`flex items-center gap-1.5 text-sm font-normal ${healthy ? 'text-primary' : 'text-destructive'}`}>
                   {healthy ? <CheckCircle2 className="w-4 h-4" /> : <XCircle className="w-4 h-4" />}
                   {healthy ? 'Healthy' : 'Offline'}
@@ -87,17 +125,17 @@ export default function McpStatus() {
                 Save
               </Button>
             </div>
-            {status?.server?.version && (
-              <p className="text-xs text-muted-foreground">Version {status.server.version}</p>
+            {healthStatus?.server?.version && (
+              <p className="text-xs text-muted-foreground">Version {healthStatus.server.version}</p>
             )}
-            {status?.message && !healthy && (
-              <p className="text-xs text-destructive">{status.message}</p>
+            {healthStatus?.message && !healthy && (
+              <p className="text-xs text-destructive">{healthStatus.message}</p>
             )}
-            {lastChecked && (
+            {lastHealthCheck && (
               <div className="flex items-center justify-between">
-                <p className="text-xs text-muted-foreground">Last checked: {lastChecked}</p>
-                <Button variant="ghost" size="sm" onClick={() => checkHealth(serverUrl)} disabled={loading || !serverUrl}>
-                  <RefreshCw className={`w-4 h-4 mr-1.5 ${loading ? 'animate-spin' : ''}`} />
+                <p className="text-xs text-muted-foreground">Last checked: {lastHealthCheck}</p>
+                <Button variant="ghost" size="sm" onClick={() => checkHealth(serverUrl)} disabled={loadingHealth || !serverUrl}>
+                  <RefreshCw className={`w-4 h-4 mr-1.5 ${loadingHealth ? 'animate-spin' : ''}`} />
                   Refresh
                 </Button>
               </div>
@@ -105,26 +143,54 @@ export default function McpStatus() {
           </CardContent>
         </Card>
 
-        {/* Services list */}
+        {/* Provider status */}
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Activity className="w-4 h-4" />
-              Connected Services
+            <CardTitle className="flex items-center justify-between">
+              <span className="flex items-center gap-2">
+                <Activity className="w-4 h-4" />
+                Provider Status
+              </span>
+              <Button variant="ghost" size="sm" onClick={() => checkProviderStatus(serverUrl)} disabled={loadingStatus || !serverUrl}>
+                <RefreshCw className={`w-4 h-4 mr-1.5 ${loadingStatus ? 'animate-spin' : ''}`} />
+                Refresh
+              </Button>
             </CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              {SERVICES.map((s) => (
-                <div key={s.name} className="flex items-center justify-between rounded-lg border border-border px-3 py-2">
-                  <span className="text-sm font-medium">{s.name}</span>
-                  <span className="text-xs text-muted-foreground">{s.type}</span>
+          <CardContent className="space-y-3">
+            {!serverUrl && (
+              <p className="text-sm text-muted-foreground">Save a server URL to check provider status.</p>
+            )}
+            {serverUrl && loadingStatus && !providerStatus && !statusError && (
+              <div className="flex items-center justify-center py-8">
+                <RefreshCw className="w-5 h-5 animate-spin text-muted-foreground" />
+              </div>
+            )}
+            {statusError && (
+              <div className="flex items-start gap-2 rounded-lg border border-destructive/20 bg-destructive/5 p-3">
+                <AlertCircle className="w-4 h-4 text-destructive shrink-0 mt-0.5" />
+                <p className="text-xs text-destructive">{statusError}</p>
+              </div>
+            )}
+            {providerStatus && !statusError && (
+              <>
+                <div className="space-y-2">
+                  {PROVIDER_NAMES.map((name) => (
+                    <ProviderCard
+                      key={name}
+                      name={name}
+                      data={providers[name]}
+                      checkedAt={providerCheckedAt}
+                    />
+                  ))}
                 </div>
-              ))}
-            </div>
-            <p className="text-xs text-muted-foreground mt-3">
-              Use the <code className="text-xs bg-muted px-1 py-0.5 rounded">check_provider_connectivity</code> MCP tool for an authenticated deep health check.
-            </p>
+                {providerCheckedAt && (
+                  <p className="text-xs text-muted-foreground text-right">
+                    Last checked: {new Date(providerCheckedAt).toLocaleTimeString()}
+                  </p>
+                )}
+              </>
+            )}
           </CardContent>
         </Card>
       </div>

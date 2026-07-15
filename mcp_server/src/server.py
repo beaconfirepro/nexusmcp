@@ -3,14 +3,17 @@ Main server module — ties everything together.
 
 Creates the FastMCP ASGI app, wraps it with Starlette to add:
   - GET /health: lightweight, UNAUTHENTICATED health check (no outbound calls)
-  - BearerAuthMiddleware: validates INBOUND_TOKEN on every request except /health
+  - GET /status: live provider status, protected by STATUS_TOKEN (separate read-only token)
+  - BearerAuthMiddleware: validates tokens per route
 
-The MCP endpoint is at /mcp. The bearer-token middleware protects it.
+The MCP endpoint is at /mcp. The inbound bearer-token middleware protects it.
+GET /status is protected by STATUS_TOKEN — it can never invoke MCP tools.
 
 Identity separation (critical):
   - Managed identity (AZURE_CLIENT_ID) → Azure Table Storage ONLY
-  - Inbound token → who may call this server
-  - Outbound OAuth → how the server talks to providers (separate from both)
+  - Inbound token → who may call this MCP server
+  - Status token → read-only provider status (cannot invoke MCP tools)
+  - Outbound OAuth → how the server talks to providers (separate from all above)
 """
 import logging
 
@@ -23,6 +26,7 @@ from src.auth import BearerAuthMiddleware
 from src.clients import init_clients
 from src.config import VERSION, load_settings
 from src.mcp_instance import mcp
+from src.status import get_all_provider_status
 
 logger = logging.getLogger("mcp_server")
 
@@ -49,6 +53,14 @@ try:
 except AttributeError:
     mcp_app = mcp.streamable_http_app()
 
+# ── CORS headers for /status (the status page is a different origin) ──
+_STATUS_CORS = {
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "GET, OPTIONS",
+    "Access-Control-Allow-Headers": "Authorization",
+}
+
+
 # ── Health check endpoint (UNAUTHENTICATED, no outbound calls) ──
 async def health(request):
     """Lightweight liveness probe — returns 200 as soon as process is up + config loaded.
@@ -59,17 +71,33 @@ async def health(request):
     return JSONResponse({"status": "ok", "version": VERSION})
 
 
+# ── Provider status endpoint (requires STATUS_TOKEN, checked by middleware) ──
+async def status(request):
+    """Live provider status — configuration, seeding, reachability, scopes, expiry.
+    Protected by STATUS_TOKEN (separate from INBOUND_TOKEN). Never leaks secrets.
+    """
+    if request.method == "OPTIONS":
+        return JSONResponse({}, status_code=204, headers=_STATUS_CORS)
+    result = await get_all_provider_status(settings)
+    return JSONResponse(result, headers=_STATUS_CORS)
+
+
 # ── Build the outer Starlette app with auth middleware ──
 # MCP app is mounted at / — it handles its own routing at /mcp internally.
-# /health is defined first so it's matched before the mount catches everything.
+# /health and /status are defined before the mount so they're matched first.
 app = Starlette(
     routes=[
         Route("/health", health, methods=["GET"]),
+        Route("/status", status, methods=["GET", "OPTIONS"]),
         Mount("/", app=mcp_app),
     ],
     middleware=[
-        Middleware(BearerAuthMiddleware, inbound_token=settings.INBOUND_TOKEN),
+        Middleware(
+            BearerAuthMiddleware,
+            inbound_token=settings.INBOUND_TOKEN,
+            status_token=settings.STATUS_TOKEN,
+        ),
     ],
 )
 
-logger.info("MCP server ready. MCP endpoint: /mcp | Health check: /health")
+logger.info("MCP server ready. MCP: /mcp | Health: /health | Status: /status")

@@ -18,6 +18,7 @@ VERSION = "1.0.0"
 
 REQUIRED_ENV_VARS = [
     "INBOUND_TOKEN",
+    "STATUS_TOKEN",
     "CONNECTEAM_KEY",
     "HUBSPOT_MAIN",
     "QBO_CLIENT_ID",
@@ -37,6 +38,7 @@ REQUIRED_ENV_VARS = [
 class Settings:
     # Inbound auth
     INBOUND_TOKEN: str
+    STATUS_TOKEN: str  # Read-only token for GET /status (separate from INBOUND_TOKEN)
     # Connecteam — https://developer.connecteam.com/docs/authentication-1
     CONNECTEAM_KEY: str
     # HubSpot — https://developers.hubspot.com/docs/api/private-apps
@@ -126,6 +128,7 @@ def load_settings() -> Settings:
         )
     return Settings(
         INBOUND_TOKEN=os.environ["INBOUND_TOKEN"],
+        STATUS_TOKEN=os.environ["STATUS_TOKEN"],
         CONNECTEAM_KEY=os.environ["CONNECTEAM_KEY"],
         HUBSPOT_MAIN=os.environ["HUBSPOT_MAIN"],
         QBO_CLIENT_ID=os.environ["QBO_CLIENT_ID"],
