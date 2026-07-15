@@ -10,10 +10,12 @@ Also exports annotation presets for tool registration:
   IDEMPOTENT    — idempotent write (safe to retry), openWorld
 """
 from mcp.server.fastmcp import FastMCP
+from mcp.server.transport_security import TransportSecuritySettings
 
 mcp = FastMCP(
     "multi-account-mcp",
     stateless_http=True,
+    transport_security=TransportSecuritySettings(enable_dns_rebinding_protection=False),
 )
 
 # Annotation presets — https://modelcontextprotocol.io/docs/concepts/tools#annotations

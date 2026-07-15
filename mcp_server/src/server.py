@@ -91,6 +91,7 @@ app = Starlette(
         Route("/status", status, methods=["GET", "OPTIONS"]),
         Mount("/", app=mcp_app),
     ],
+    lifespan=mcp_app.router.lifespan_context,
     middleware=[
         Middleware(
             BearerAuthMiddleware,
