@@ -1,14 +1,10 @@
-import { createClientFromRequest } from 'npm:@base44/sdk@0.8.38';
-
 Deno.serve(async (req) => {
   try {
-    const base44 = createClientFromRequest(req);
-    const user = await base44.auth.me();
-    if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
-
     const body = await req.json();
     const { url } = body;
-    if (!url) return Response.json({ error: 'Missing url' }, { status: 400 });
+    if (!url || (!url.startsWith('http://') && !url.startsWith('https://'))) {
+      return Response.json({ error: 'Missing or invalid url' }, { status: 400 });
+    }
 
     const baseUrl = url.replace(/\/+$/, '');
     const controller = new AbortController();
