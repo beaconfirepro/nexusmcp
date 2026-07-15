@@ -68,7 +68,7 @@ export default function McpStatus() {
             <CardTitle className="flex items-center justify-between">
               <span>Server Connection</span>
               {status && (
-                <span className={`flex items-center gap-1.5 text-sm font-normal ${healthy ? 'text-green-600' : 'text-destructive'}`}>
+                <span className={`flex items-center gap-1.5 text-sm font-normal ${healthy ? 'text-primary' : 'text-destructive'}`}>
                   {healthy ? <CheckCircle2 className="w-4 h-4" /> : <XCircle className="w-4 h-4" />}
                   {healthy ? 'Healthy' : 'Offline'}
                 </span>
