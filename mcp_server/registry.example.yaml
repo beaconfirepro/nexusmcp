@@ -1,0 +1,34 @@
+# ──────────────────────────────────────────────────────────────
+# Account Registry Template
+# Maps ACCOUNT ALIAS -> { provider, description }
+# The app ships with ONE login per provider (the :main alias).
+# To add more logins later, add new aliases here and seed their
+# OAuth refresh tokens via scripts/seed_oauth.py.
+#
+# Static-key providers (connecteam, hubspot) read their credentials
+# from env vars. OAuth providers (qbo, microsoft, google) store
+# refresh tokens in Azure Table Storage (PartitionKey=provider,
+# RowKey=alias), seeded via the OAuth script.
+# ──────────────────────────────────────────────────────────────
+
+accounts:
+  - alias: connecteam:main
+    provider: connecteam
+    description: "Primary Connecteam account"
+
+  - alias: qbo:main
+    provider: qbo
+    description: "Primary QuickBooks Online company"
+    # realmId is stored in Table Storage alongside the refresh token
+
+  - alias: hubspot:main
+    provider: hubspot
+    description: "Primary HubSpot portal"
+
+  - alias: microsoft:main
+    provider: microsoft
+    description: "Owner Entra login — SharePoint + Outlook mail + Outlook calendar"
+
+  - alias: google:main
+    provider: google
+    description: "Owner Google login — Gmail + Google Calendar"

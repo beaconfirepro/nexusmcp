@@ -1,0 +1,9 @@
+# Multi-Account MCP Server — pinned dependencies
+# Lock with `pip-compile` or `uv pip compile` for a fully reproducible lockfile.
+mcp>=1.27,<2.0.0
+httpx==0.27.2
+pydantic==2.10.4
+azure-identity==1.19.0
+azure-data-tables==12.6.0
+uvicorn==0.34.0
+python-dotenv==1.0.1

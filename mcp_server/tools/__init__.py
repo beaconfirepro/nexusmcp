@@ -1,0 +1,1 @@
+"""MCP tool modules — one per provider, imported by server.py to register tools."""
