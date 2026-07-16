@@ -5,7 +5,7 @@ Container Apps injects Key Vault secret values as env vars via
 Key Vault-reference secrets resolved with the attached managed identity.
 
 Env var contract (see .env.example for descriptions):
-  STATUS_TOKEN, MCP_BASE_URL, OWNER_LOGIN_PASSWORD, JWT_SIGNING_KEY,
+  MCP_BASE_URL, OWNER_LOGIN_PASSWORD, JWT_SIGNING_KEY,
   CONNECTEAM_KEY, HUBSPOT_MAIN,
   QBO_CLIENT_ID, QBO_CLIENT_SECRET, QBO_ENV,
   GRAPH_CLIENT_ID, GRAPH_CLIENT_SECRET, TENANT_ID,
@@ -18,7 +18,6 @@ from dataclasses import dataclass
 VERSION = "1.0.0"
 
 REQUIRED_ENV_VARS = [
-    "STATUS_TOKEN",
     "MCP_BASE_URL",
     "OWNER_LOGIN_PASSWORD",
     "JWT_SIGNING_KEY",
@@ -40,7 +39,6 @@ REQUIRED_ENV_VARS = [
 @dataclass(frozen=True)
 class Settings:
     # Inbound auth — OAuth 2.1 authorization server
-    STATUS_TOKEN: str            # Read-only token for GET /status (separate from OAuth)
     MCP_BASE_URL: str            # Public base URL, e.g. https://multi-mcp.xxx.eastus.azurecontainerapps.io
     OWNER_LOGIN_PASSWORD: str    # Single-owner password for /authorize login screen
     JWT_SIGNING_KEY: str         # HS256 signing key for JWT access tokens
@@ -124,7 +122,6 @@ def load_settings() -> Settings:
             f"QBO_ENV must be 'sandbox' or 'production', got: {qbo_env!r}"
         )
     return Settings(
-        STATUS_TOKEN=os.environ["STATUS_TOKEN"],
         MCP_BASE_URL=os.environ["MCP_BASE_URL"],
         OWNER_LOGIN_PASSWORD=os.environ["OWNER_LOGIN_PASSWORD"],
         JWT_SIGNING_KEY=os.environ["JWT_SIGNING_KEY"],

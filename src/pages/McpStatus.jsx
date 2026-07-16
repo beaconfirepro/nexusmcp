@@ -45,11 +45,7 @@ export default function McpStatus() {
       const resp = await base44.functions.invoke('mcpStatus', { url });
       const data = resp.data;
       if (data?.ok === false) {
-        if (data.status === 401) {
-          setStatusError('Invalid or missing STATUS_TOKEN. Verify STATUS_TOKEN is set correctly on the server.');
-        } else {
-          setStatusError(data.error || `Server returned status ${data.status}`);
-        }
+        setStatusError(data.error || `Server returned status ${data.status}`);
         setProviderStatus(null);
       } else if (data?.providers) {
         setProviderStatus(data);

@@ -7,21 +7,12 @@ Deno.serve(async (req) => {
     }
 
     const baseUrl = url.replace(/\/+$/, '');
-    const statusToken = Deno.env.get('STATUS_TOKEN');
-    if (!statusToken) {
-      return Response.json({
-        ok: false,
-        error: 'STATUS_TOKEN is not configured on the server.',
-        checked_at: new Date().toISOString(),
-      });
-    }
 
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 15000);
 
     try {
       const resp = await fetch(`${baseUrl}/status`, {
-        headers: { 'Authorization': `Bearer ${statusToken}` },
         signal: controller.signal,
       });
       clearTimeout(timeout);
