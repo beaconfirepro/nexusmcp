@@ -109,6 +109,7 @@ app = Starlette(
     middleware=[
         Middleware(
             OAuthBearerAuthMiddleware,
+            status_token=settings.STATUS_TOKEN,
             jwt_signing_key=settings.JWT_SIGNING_KEY,
             issuer=settings.MCP_BASE_URL.rstrip("/"),
             audience=f"{settings.MCP_BASE_URL.rstrip('/')}/mcp",

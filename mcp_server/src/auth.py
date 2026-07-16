@@ -2,7 +2,7 @@
 Inbound auth middleware — OAuth 2.1 JWT validation for /mcp.
 
   - /health: OPEN (unauthenticated, for ACA liveness probes)
-  - /status: OPEN (authenticated at the app layer; no server-side token)
+  - /status: requires STATUS_TOKEN (read-only, separate from OAuth)
   - OAuth endpoints (/authorize, /token, /register, /.well-known/*): OPEN
   - /mcp: requires a valid OAuth 2.1 JWT access token
   - Everything else: pass through (MCP app returns 404 for unknown paths)
@@ -14,6 +14,7 @@ per the MCP authorization spec.
 Identity layers (critical):
   - Managed identity (AZURE_CLIENT_ID) → Azure Table Storage ONLY
   - OAuth JWT access token → who may call /mcp
+  - Status token → read-only provider status (cannot invoke MCP tools)
   - Outbound OAuth → how the server talks to providers (separate from all above)
 """
 import logging
@@ -28,7 +29,6 @@ logger = logging.getLogger("mcp_server.auth")
 
 _OPEN_PATHS = frozenset({
     "/health",
-    "/status",
     "/.well-known/oauth-authorization-server",
     "/.well-known/oauth-protected-resource",
     "/register",
@@ -54,8 +54,9 @@ def _unauthorized_response(issuer: str) -> JSONResponse:
 class OAuthBearerAuthMiddleware(BaseHTTPMiddleware):
     """Validates OAuth 2.1 JWT access tokens on /mcp; open routes for /health and OAuth."""
 
-    def __init__(self, app, jwt_signing_key: str, issuer: str, audience: str):
+    def __init__(self, app, status_token: str, jwt_signing_key: str, issuer: str, audience: str):
         super().__init__(app)
+        self._status_expected = f"Bearer {status_token}"
         self._jwt_signing_key = jwt_signing_key
         self._issuer = issuer
         self._audience = audience
@@ -63,8 +64,22 @@ class OAuthBearerAuthMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         path = request.url.path
 
-        # Open paths: /health, /status, OAuth endpoints
+        # Open paths: /health, OAuth endpoints
         if path in _OPEN_PATHS:
+            return await call_next(request)
+
+        # /status OPTIONS preflight (browser sends no Authorization)
+        if path == "/status" and request.method == "OPTIONS":
+            return await call_next(request)
+
+        # /status: STATUS_TOKEN (never accepts OAuth tokens)
+        if path == "/status":
+            if request.headers.get("Authorization", "") != self._status_expected:
+                logger.warning("Unauthorized /status request — invalid or missing status token")
+                return JSONResponse(
+                    {"error": "unauthorized", "message": "A valid status bearer token is required."},
+                    status_code=401,
+                )
             return await call_next(request)
 
         # /mcp: validate OAuth 2.1 JWT access token
