@@ -5,7 +5,8 @@ Container Apps injects Key Vault secret values as env vars via
 Key Vault-reference secrets resolved with the attached managed identity.
 
 Env var contract (see .env.example for descriptions):
-  INBOUND_TOKEN, CONNECTEAM_KEY, HUBSPOT_MAIN,
+  STATUS_TOKEN, MCP_BASE_URL, OWNER_LOGIN_PASSWORD, JWT_SIGNING_KEY,
+  CONNECTEAM_KEY, HUBSPOT_MAIN,
   QBO_CLIENT_ID, QBO_CLIENT_SECRET, QBO_ENV,
   GRAPH_CLIENT_ID, GRAPH_CLIENT_SECRET, TENANT_ID,
   GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET,
@@ -17,8 +18,10 @@ from dataclasses import dataclass
 VERSION = "1.0.0"
 
 REQUIRED_ENV_VARS = [
-    "INBOUND_TOKEN",
     "STATUS_TOKEN",
+    "MCP_BASE_URL",
+    "OWNER_LOGIN_PASSWORD",
+    "JWT_SIGNING_KEY",
     "CONNECTEAM_KEY",
     "HUBSPOT_MAIN",
     "QBO_CLIENT_ID",
@@ -36,9 +39,11 @@ REQUIRED_ENV_VARS = [
 
 @dataclass(frozen=True)
 class Settings:
-    # Inbound auth
-    INBOUND_TOKEN: str
-    STATUS_TOKEN: str  # Read-only token for GET /status (separate from INBOUND_TOKEN)
+    # Inbound auth — OAuth 2.1 authorization server
+    STATUS_TOKEN: str            # Read-only token for GET /status (separate from OAuth)
+    MCP_BASE_URL: str            # Public base URL, e.g. https://multi-mcp.xxx.eastus.azurecontainerapps.io
+    OWNER_LOGIN_PASSWORD: str    # Single-owner password for /authorize login screen
+    JWT_SIGNING_KEY: str         # HS256 signing key for JWT access tokens
     # Connecteam — https://developer.connecteam.com/docs/authentication-1
     CONNECTEAM_KEY: str
     # HubSpot — https://developers.hubspot.com/docs/api/private-apps
@@ -61,7 +66,6 @@ class Settings:
 
     @property
     def qbo_base_url(self) -> str:
-        # https://developer.intuit.com/app/developer/qbo/docs/develop/authentication-and-authorization/oauth-2.0
         if self.QBO_ENV == "production":
             return "https://quickbooks.api.intuit.com"
         return "https://sandbox-quickbooks.api.intuit.com"
@@ -72,12 +76,10 @@ class Settings:
 
     @property
     def graph_base_url(self) -> str:
-        # https://learn.microsoft.com/en-us/graph/api/overview
         return "https://graph.microsoft.com/v1.0"
 
     @property
     def graph_token_url(self) -> str:
-        # https://learn.microsoft.com/en-us/entra/identity-platform/v2-oauth2-auth-code-flow
         return f"https://login.microsoftonline.com/{self.TENANT_ID}/oauth2/v2.0/token"
 
     @property
@@ -86,7 +88,6 @@ class Settings:
 
     @property
     def google_token_url(self) -> str:
-        # https://developers.google.com/identity/protocols/oauth2/web-server#httprest_7
         return "https://oauth2.googleapis.com/token"
 
     @property
@@ -95,22 +96,18 @@ class Settings:
 
     @property
     def gmail_base_url(self) -> str:
-        # https://developers.google.com/gmail/api/reference/rest
         return "https://gmail.googleapis.com/gmail/v1"
 
     @property
     def gcal_base_url(self) -> str:
-        # https://developers.google.com/calendar/api/v3/reference
         return "https://www.googleapis.com/calendar/v3"
 
     @property
     def connecteam_base_url(self) -> str:
-        # https://developer.connecteam.com/docs/introduction-1#base-urls
         return "https://api.connecteam.com"
 
     @property
     def hubspot_base_url(self) -> str:
-        # https://developers.hubspot.com/docs/api/crm/overview
         return "https://api.hubapi.com"
 
 
@@ -127,8 +124,10 @@ def load_settings() -> Settings:
             f"QBO_ENV must be 'sandbox' or 'production', got: {qbo_env!r}"
         )
     return Settings(
-        INBOUND_TOKEN=os.environ["INBOUND_TOKEN"],
         STATUS_TOKEN=os.environ["STATUS_TOKEN"],
+        MCP_BASE_URL=os.environ["MCP_BASE_URL"],
+        OWNER_LOGIN_PASSWORD=os.environ["OWNER_LOGIN_PASSWORD"],
+        JWT_SIGNING_KEY=os.environ["JWT_SIGNING_KEY"],
         CONNECTEAM_KEY=os.environ["CONNECTEAM_KEY"],
         HUBSPOT_MAIN=os.environ["HUBSPOT_MAIN"],
         QBO_CLIENT_ID=os.environ["QBO_CLIENT_ID"],

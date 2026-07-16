@@ -4,14 +4,16 @@ Main server module — ties everything together.
 Creates the FastMCP ASGI app, wraps it with Starlette to add:
   - GET /health: lightweight, UNAUTHENTICATED health check (no outbound calls)
   - GET /status: live provider status, protected by STATUS_TOKEN (separate read-only token)
-  - BearerAuthMiddleware: validates tokens per route
+  - OAuth 2.1 Authorization Server: /authorize, /token, /register, /.well-known/*
+  - OAuthBearerAuthMiddleware: validates JWT access tokens on /mcp
 
-The MCP endpoint is at /mcp. The inbound bearer-token middleware protects it.
+The MCP endpoint is at /mcp, protected by OAuth 2.1 JWT access tokens.
+OAuth endpoints (/authorize, /token, /register, /.well-known/*) are open.
 GET /status is protected by STATUS_TOKEN — it can never invoke MCP tools.
 
 Identity separation (critical):
   - Managed identity (AZURE_CLIENT_ID) → Azure Table Storage ONLY
-  - Inbound token → who may call this MCP server
+  - OAuth JWT access token → who may call /mcp
   - Status token → read-only provider status (cannot invoke MCP tools)
   - Outbound OAuth → how the server talks to providers (separate from all above)
 """
@@ -22,10 +24,17 @@ from starlette.middleware import Middleware
 from starlette.responses import JSONResponse
 from starlette.routing import Mount, Route
 
-from src.auth import BearerAuthMiddleware
+from src.auth import OAuthBearerAuthMiddleware
 from src.clients import init_clients
 from src.config import VERSION, load_settings
 from src.mcp_instance import mcp
+from src.oauth_routes import (
+    authorization_server_metadata,
+    protected_resource_metadata,
+    register as oauth_register,
+    authorize,
+    token as oauth_token,
+)
 from src.status import get_all_provider_status
 
 logger = logging.getLogger("mcp_server")
@@ -89,16 +98,25 @@ app = Starlette(
     routes=[
         Route("/health", health, methods=["GET"]),
         Route("/status", status, methods=["GET", "OPTIONS"]),
+        Route("/.well-known/oauth-authorization-server", authorization_server_metadata, methods=["GET"]),
+        Route("/.well-known/oauth-protected-resource", protected_resource_metadata, methods=["GET"]),
+        Route("/register", oauth_register, methods=["POST"]),
+        Route("/authorize", authorize, methods=["GET", "POST"]),
+        Route("/token", oauth_token, methods=["POST"]),
         Mount("/", app=mcp_app),
     ],
     lifespan=mcp_app.router.lifespan_context,
     middleware=[
         Middleware(
-            BearerAuthMiddleware,
-            inbound_token=settings.INBOUND_TOKEN,
+            OAuthBearerAuthMiddleware,
             status_token=settings.STATUS_TOKEN,
+            jwt_signing_key=settings.JWT_SIGNING_KEY,
+            issuer=settings.MCP_BASE_URL.rstrip("/"),
+            audience=f"{settings.MCP_BASE_URL.rstrip('/')}/mcp",
         ),
     ],
 )
 
-logger.info("MCP server ready. MCP: /mcp | Health: /health | Status: /status")
+app.state.settings = settings
+
+logger.info("MCP server ready. MCP: /mcp (OAuth) | Health: /health | Status: /status | OAuth: /authorize /token /register")
