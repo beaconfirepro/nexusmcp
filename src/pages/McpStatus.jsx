@@ -1,9 +1,13 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Activity, RefreshCw, CheckCircle2, XCircle, Server, AlertCircle } from 'lucide-react';
+import { Activity, RefreshCw, CheckCircle2, XCircle, Server, AlertCircle, LogOut } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { base44 } from '@/api/base44Client';
+
+const handleLogout = () => {
+  base44.auth.logout('/login');
+};
 import ProviderCard from '@/components/mcp/ProviderCard';
 
 const PROVIDER_NAMES = ['connecteam', 'qbo', 'hubspot', 'microsoft', 'google'];
@@ -96,10 +100,14 @@ export default function McpStatus() {
       <div className="w-full max-w-2xl space-y-6">
         <div className="flex items-center gap-3">
           <Server className="w-7 h-7 text-foreground" />
-          <div>
+          <div className="flex-1">
             <h1 className="text-2xl font-heading font-bold">MCP Server Status</h1>
             <p className="text-sm text-muted-foreground">Multi-Account MCP Server health monitor</p>
           </div>
+          <Button variant="ghost" size="sm" onClick={handleLogout} className="shrink-0">
+            <LogOut className="w-4 h-4 mr-1.5" />
+            Logout
+          </Button>
         </div>
 
         {/* Server URL + health badge */}
