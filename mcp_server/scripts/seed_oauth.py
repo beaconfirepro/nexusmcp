@@ -134,7 +134,7 @@ async def seed_qbo(alias: str = "main"):
 
     # https://developer.intuit.com/app/developer/qbo/docs/develop/authentication-and-authorization/oauth-2.0
     auth_base = "https://appcenter.intuit.com/connect/oauth2"
-    scope = "com.intuit.quickbooks.accounting"
+    scope = "com.intuit.quickbooks.accounting app-foundations.custom-field-definitions"
 
     params = urlencode({
         "client_id": client_id,
