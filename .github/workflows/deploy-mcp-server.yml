@@ -1,0 +1,71 @@
+name: Deploy MCP server
+
+# Builds the MCP server image in Azure Container Registry and rolls the
+# Azure Container App to it. Runs on every push to main that touches the
+# server code (or this workflow), plus a manual trigger from the Actions tab.
+#
+# Requires three repository secrets for OIDC (passwordless) Azure login:
+#   AZURE_CLIENT_ID        - client id of the Entra app with a federated credential for this repo
+#   AZURE_TENANT_ID        - directory (tenant) id
+#   AZURE_SUBSCRIPTION_ID  - subscription containing resource group mcp-rg
+# The app registration needs a role (e.g. Contributor) scoped to mcp-rg so it
+# can run ACR builds and update the Container App. See MAINTENANCE.md.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'mcp_server/**'
+      - '.github/workflows/deploy-mcp-server.yml'
+  workflow_dispatch:
+
+permissions:
+  id-token: write   # required for azure/login OIDC
+  contents: read
+
+concurrency:
+  group: deploy-mcp-server
+  cancel-in-progress: false
+
+env:
+  ACR_NAME: mcpacrbeacon01
+  IMAGE_NAME: multi-mcp
+  RESOURCE_GROUP: mcp-rg
+  CONTAINERAPP_NAME: multi-mcp
+  BUILD_CONTEXT: mcp_server
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Build image in ACR
+        uses: azure/cli@v2
+        with:
+          azcliversion: latest
+          inlineScript: |
+            az acr build \
+              -r "$ACR_NAME" \
+              -t "$IMAGE_NAME:${{ github.sha }}" \
+              -t "$IMAGE_NAME:latest" \
+              "$BUILD_CONTEXT"
+
+      - name: Update Container App
+        uses: azure/cli@v2
+        with:
+          azcliversion: latest
+          inlineScript: |
+            # Deploy the commit-pinned tag so a new revision always rolls out.
+            az containerapp update \
+              -n "$CONTAINERAPP_NAME" \
+              -g "$RESOURCE_GROUP" \
+              --image "$ACR_NAME.azurecr.io/$IMAGE_NAME:${{ github.sha }}"
