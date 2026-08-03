@@ -138,14 +138,136 @@ async def connecteam_list_time_clock(input: ConnecteamListTimeClockInput) -> str
 # ── Jobs, forms, tasks ──
 
 class ConnecteamListJobsInput(BaseToolInput):
-    limit: int = Field(default=50, ge=1, le=200)
-    offset: int = Field(default=0, ge=0)
+    instance_ids: list | None = Field(
+        default=None,
+        description="Filter by scheduler / time-clock instance IDs.",
+        examples=[[14341327, 15711684]],
+    )
+    job_ids: list | None = Field(default=None, description="Filter by job IDs.")
+    job_names: list | None = Field(default=None, description="Filter by job names.")
+    job_codes: list | None = Field(
+        default=None,
+        description="Filter by job codes (Beacon numbers).",
+        examples=[["BFP24-00100"]],
+    )
+    include_deleted: bool = Field(
+        default=True,
+        description="Include deleted jobs (Connecteam's API default is true). "
+                    "Pass false to return active jobs only.",
+    )
+    sort: str | None = Field(default=None, description="Sort field. Allowed: 'title'.", examples=["title"])
+    order: str = Field(default="asc", description="Sort order: 'asc' or 'desc'.", examples=["asc", "desc"])
+    limit: int = Field(default=50, ge=1, le=500, description="Max results per page (1-500).", examples=[50])
+    offset: int = Field(default=0, ge=0, description="Offset for pagination.", examples=[0])
 
 
-@mcp.tool(annotations=RO, description="List jobs.")
+@mcp.tool(annotations=RO,
+          description="List Connecteam jobs (GET /jobs/v1/jobs). Filter by instance IDs, "
+                      "job IDs / names / codes; supports include_deleted, sort, and pagination.")
 async def connecteam_list_jobs(input: ConnecteamListJobsInput) -> str:
     client = get_client("connecteam")
-    result = await client.list_jobs(limit=input.limit, offset=input.offset)
+    params: dict = {
+        "includeDeleted": input.include_deleted,
+        "order": input.order,
+        "limit": input.limit,
+        "offset": input.offset,
+    }
+    if input.instance_ids is not None:
+        params["instanceIds"] = input.instance_ids
+    if input.job_ids is not None:
+        params["jobIds"] = input.job_ids
+    if input.job_names is not None:
+        params["jobNames"] = input.job_names
+    if input.job_codes is not None:
+        params["jobCodes"] = input.job_codes
+    if input.sort is not None:
+        params["sort"] = input.sort
+    result = await client.list_jobs(params)
+    return client.format(result, input.response_format)
+
+
+class ConnecteamListJobCustomFieldsInput(BaseToolInput):
+    custom_field_ids: list | None = Field(default=None, description="Filter by custom field IDs.")
+    category_ids: list | None = Field(default=None, description="Filter by category IDs.")
+    custom_field_types: list | None = Field(default=None, description="Filter by field types.")
+    custom_field_names: list | None = Field(default=None, description="Filter by field names.")
+    sort: str | None = Field(default=None, description="Sort field. Allowed: 'name', 'type'.")
+    order: str = Field(default="asc", description="Sort order: 'asc' or 'desc'.", examples=["asc", "desc"])
+    limit: int = Field(default=50, ge=1, le=500, description="Max results per page (1-500).", examples=[50])
+    offset: int = Field(default=0, ge=0, description="Offset for pagination.", examples=[0])
+
+
+@mcp.tool(annotations=RO,
+          description="List Connecteam job resource custom fields (GET /jobs/v1/custom-fields).")
+async def connecteam_list_job_custom_fields(input: ConnecteamListJobCustomFieldsInput) -> str:
+    client = get_client("connecteam")
+    params: dict = {"order": input.order, "limit": input.limit, "offset": input.offset}
+    if input.custom_field_ids is not None:
+        params["customFieldIds"] = input.custom_field_ids
+    if input.category_ids is not None:
+        params["categoryIds"] = input.category_ids
+    if input.custom_field_types is not None:
+        params["customFieldTypes"] = input.custom_field_types
+    if input.custom_field_names is not None:
+        params["customFieldNames"] = input.custom_field_names
+    if input.sort is not None:
+        params["sort"] = input.sort
+    result = await client.list_job_custom_fields(params)
+    return client.format(result, input.response_format)
+
+
+class ConnecteamCreateJobsInput(BaseToolInput, DryRunInput):
+    jobs: list = Field(
+        description="List of job objects to create. POST /jobs/v1/jobs takes a top-level array; "
+                    "each element is a job (or sub-job) object. A parent job requires instanceIds "
+                    "(scheduler / time-clock IDs), title, and assign {type, userIds, groupIds}; optional "
+                    "code, description, color, gps {address, longitude, latitude}, customFields, and "
+                    "subJobs. Sub-jobs with useParentData=true inherit the parent's settings.",
+        examples=[[{
+            "instanceIds": [14341327, 15711684],
+            "title": "1400 Cedar Ave Townhomes",
+            "code": "BFP24-00072",
+            "description": "Client: Zach Savage Custom Homes\nSystem Type: 13D SF",
+            "assign": {"type": "both", "userIds": [], "groupIds": [10820945]},
+            "subJobs": [
+                {"title": "1: Sales", "useParentData": True},
+                {"title": "2: Planning", "useParentData": True},
+            ],
+        }]],
+    )
+
+
+@mcp.tool(annotations=WRITE,
+          description="Create one or more Connecteam jobs (POST /jobs/v1/jobs). The body is a "
+                      "top-level array of job objects. Use dry_run=true to validate without creating.")
+async def connecteam_create_jobs(input: ConnecteamCreateJobsInput) -> str:
+    client = get_client("connecteam")
+    if input.dry_run:
+        return f"[DRY RUN] Would create {len(input.jobs)} job(s): {input.jobs}"
+    result = await client.create_jobs(input.jobs)
+    return client.format(result, input.response_format)
+
+
+class ConnecteamUpdateJobInput(BaseToolInput, DryRunInput):
+    job_id: str = Field(description="The jobId to update (path parameter).",
+                        examples=["a3efa69b-e17d-4b46-9ac9-3f27e686a36c"])
+    job_data: dict = Field(
+        description="Fields to update on the job (PUT /jobs/v1/jobs/{jobId}, a single object). "
+                    "Updatable: title, code, description, color, gps, assign, customFields, "
+                    "instanceIds, useParentData. Updating a job that has nested sub-jobs is not "
+                    "supported by Connecteam.",
+        examples=[{"description": "Client: Zach Savage Custom Homes\nSystem Type: 13D SF"}],
+    )
+
+
+@mcp.tool(annotations=IDEMPOTENT,
+          description="Update a single Connecteam job by jobId (PUT /jobs/v1/jobs/{jobId}). "
+                      "Use dry_run=true to validate without writing.")
+async def connecteam_update_job(input: ConnecteamUpdateJobInput) -> str:
+    client = get_client("connecteam")
+    if input.dry_run:
+        return f"[DRY RUN] Would update job {input.job_id}: {input.job_data}"
+    result = await client.update_job(input.job_id, input.job_data)
     return client.format(result, input.response_format)
 
 
@@ -179,7 +301,11 @@ class ConnecteamRequestInput(BaseToolInput):
     method: str = Field(description="HTTP method.", examples=["GET", "POST", "PUT", "DELETE"])
     path: str = Field(description="API path (starts with /).", examples=["/users/12345"])
     query: dict | None = Field(default=None, description="Query parameters.")
-    body: dict | None = Field(default=None, description="Request body (JSON).")
+    body: dict | list | None = Field(
+        default=None,
+        description="Request body (JSON). Accepts a JSON object or a top-level JSON array; some "
+                    "Connecteam endpoints require an array body.",
+    )
 
 
 @mcp.tool(annotations=WRITE,
