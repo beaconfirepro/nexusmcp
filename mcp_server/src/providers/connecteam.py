@@ -67,12 +67,25 @@ class ConnecteamClient(BaseProviderClient):
             params={"limit": limit, "offset": offset},
         )
 
-    async def list_jobs(self, limit: int = 50, offset: int = 0) -> dict:
-        return await self.request(
-            "GET", "/jobs",
-            headers=self._headers(),
-            params={"limit": limit, "offset": offset},
-        )
+    async def list_jobs(self, params: dict | None = None) -> dict | list:
+        # GET /jobs/v1/jobs
+        # https://developer.connecteam.com/reference/get_jobs_jobs_v1_jobs_get
+        return await self.request("GET", "/jobs/v1/jobs", headers=self._headers(), params=params)
+
+    async def list_job_custom_fields(self, params: dict | None = None) -> dict | list:
+        # GET /jobs/v1/custom-fields
+        # https://developer.connecteam.com/reference/get_resource_custom_fields_jobs_v1_custom_fields_get
+        return await self.request("GET", "/jobs/v1/custom-fields", headers=self._headers(), params=params)
+
+    async def create_jobs(self, jobs: list) -> dict | list:
+        # POST /jobs/v1/jobs — body is a top-level array of job objects.
+        # https://developer.connecteam.com/reference/create_jobs_jobs_v1_jobs_post
+        return await self.request("POST", "/jobs/v1/jobs", headers=self._headers(), json_body=jobs)
+
+    async def update_job(self, job_id: str, job_data: dict) -> dict | list:
+        # PUT /jobs/v1/jobs/{jobId} — single object; nested sub-jobs not supported.
+        # https://developer.connecteam.com/reference/update_job_jobs_v1_jobs__jobid__put
+        return await self.request("PUT", f"/jobs/v1/jobs/{job_id}", headers=self._headers(), json_body=job_data)
 
     async def list_forms(self, limit: int = 50, offset: int = 0) -> dict:
         return await self.request(
@@ -92,7 +105,7 @@ class ConnecteamClient(BaseProviderClient):
 
     async def generic_request(
         self, method: str, path: str,
-        query: dict | None = None, body: dict | None = None,
+        query: dict | None = None, body: dict | list | None = None,
     ) -> dict | list | str:
         """Call ANY Connecteam endpoint. path should start with /."""
         return await self.request(
