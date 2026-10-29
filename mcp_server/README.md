@@ -386,6 +386,7 @@ For each provider (connecteam, qbo, hubspot, microsoft, google):
 | `configured` | Credentials / registry entry present in env |
 | `seeded` | For OAuth providers: refresh token exists in Table Storage |
 | `reachable` | Result of a lightweight live auth ping |
+| `accounts` | Per-alias status (same fields) for every login of the provider, e.g. `microsoft:work2`. Top-level fields describe `main` |
 | `scopes` | Granted scopes (Google via tokeninfo, Microsoft from JWT `scp`, HubSpot via token-info, QBO fixed, Connecteam `api_key`) |
 | `expires_at` | Token expiry if applicable |
 | `error` | Short message if the ping failed (never leaks secrets) |

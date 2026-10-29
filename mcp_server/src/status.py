@@ -15,7 +15,7 @@ from datetime import datetime, timezone
 
 import httpx
 
-from src.clients import get_client, get_oauth_config, get_oauth_helper, get_token_store, resolve_account
+from src.clients import get_client, get_oauth_config, get_oauth_helper, get_token_store
 from src.config import Settings
 
 logger = logging.getLogger("mcp_server.status")
@@ -35,60 +35,55 @@ def _is_configured(provider: str, settings: Settings) -> bool:
     return checks.get(provider, False)
 
 
-def _is_seeded(provider: str) -> bool:
-    """For OAuth providers, check if a refresh token exists in Table Storage."""
-    if provider not in ("qbo", "microsoft", "google"):
-        return True  # Static-key providers are always 'seeded'
+OAUTH_PROVIDERS = ("qbo", "microsoft", "google")
+DEFAULT_ALIAS = "main"
+
+
+def list_account_aliases(provider: str) -> list[str]:
+    """All account aliases for a provider (bare aliases, e.g. 'main', 'work2').
+    OAuth providers: every row in the token store, always including the default
+    alias so an unseeded 'main' still reports as 'Not seeded'. Static-key
+    providers have a single login."""
+    if provider not in OAUTH_PROVIDERS:
+        return [DEFAULT_ALIAS]
     try:
-        store = get_token_store()
-        alias = resolve_account(provider, None)
-        record = store.get_token_record(provider, alias)
-        return record is not None and bool(record.get("refresh_token"))
+        found = sorted(get_token_store().list_aliases(provider))
     except Exception:
-        return False
+        found = []
+    if DEFAULT_ALIAS in found:
+        found.remove(DEFAULT_ALIAS)
+    return [DEFAULT_ALIAS, *found]
 
 
-def _get_expires_at(provider: str) -> str | None:
-    """Get token expiry from the token store if applicable."""
-    if provider not in ("qbo", "microsoft", "google"):
+def _get_record(provider: str, alias: str) -> dict | None:
+    if provider not in OAUTH_PROVIDERS:
         return None
     try:
-        store = get_token_store()
-        alias = resolve_account(provider, None)
-        record = store.get_token_record(provider, alias)
-        if record:
-            return record.get("expires_at")
+        return get_token_store().get_token_record(provider, alias)
     except Exception:
-        pass
-    return None
+        return None
 
 
-async def _check_reachable(provider: str) -> tuple[bool, str | None]:
+async def _check_reachable(provider: str, alias: str) -> tuple[bool, str | None]:
     """Lightweight live auth ping — reuses existing client methods."""
     try:
         if provider == "connecteam":
             await get_client("connecteam").get_me()
         elif provider == "qbo":
-            client = get_client("qbo")
-            alias = resolve_account("qbo", None)
-            await client.query_entity("Customer", alias, limit=1)
+            await get_client("qbo").query_entity("Customer", alias, limit=1)
         elif provider == "hubspot":
             await get_client("hubspot").list_objects("contacts", limit=1)
         elif provider == "microsoft":
-            client = get_client("microsoft")
-            alias = resolve_account("microsoft", None)
-            await client.list_calendars(alias, limit=1)
+            await get_client("microsoft").list_calendars(alias, limit=1)
         elif provider == "google":
-            client = get_client("google")
-            alias = resolve_account("google", None)
-            await client.list_calendars(alias)
+            await get_client("google").list_calendars(alias)
         return True, None
     except Exception as e:
         return False, str(e)[:200]
 
 
-async def _get_scopes(provider: str) -> list[str]:
-    """Fetch granted scopes per provider."""
+async def _get_scopes(provider: str, alias: str) -> list[str]:
+    """Fetch granted scopes per provider/account."""
     if provider == "connecteam":
         return ["api_key"]
 
@@ -114,7 +109,6 @@ async def _get_scopes(provider: str) -> list[str]:
         try:
             oauth_helper = get_oauth_helper()
             oauth_config = get_oauth_config("microsoft")
-            alias = resolve_account("microsoft", None)
             access_token = await oauth_helper.get_valid_access_token(oauth_config, alias)
             parts = access_token.split(".")
             if len(parts) >= 2:
@@ -135,7 +129,6 @@ async def _get_scopes(provider: str) -> list[str]:
         try:
             oauth_helper = get_oauth_helper()
             oauth_config = get_oauth_config("google")
-            alias = resolve_account("google", None)
             access_token = await oauth_helper.get_valid_access_token(oauth_config, alias)
             async with httpx.AsyncClient(timeout=10.0) as http:
                 resp = await http.get(
@@ -152,11 +145,12 @@ async def _get_scopes(provider: str) -> list[str]:
     return []
 
 
-async def _check_provider(provider: str, settings: Settings) -> dict:
-    """Gather all status data for one provider."""
+async def _check_account(provider: str, alias: str, settings: Settings) -> dict:
+    """Gather all status data for one account (alias) of a provider."""
     configured = _is_configured(provider, settings)
-    seeded = _is_seeded(provider)
-    expires_at = _get_expires_at(provider)
+    record = _get_record(provider, alias)
+    seeded = True if provider not in OAUTH_PROVIDERS else bool(record and record.get("refresh_token"))
+    expires_at = record.get("expires_at") if record else None
 
     reachable = False
     error: str | None = None
@@ -165,11 +159,12 @@ async def _check_provider(provider: str, settings: Settings) -> dict:
     if not configured:
         error = "Not configured — required env vars are missing."
     elif not seeded:
-        error = "Not seeded — no refresh token in token store. Run scripts/seed_oauth.py."
+        error = "Not seeded — no refresh token in token store. Run scripts/seed_oauth.py"
+        error += " or open /connect/microsoft." if provider == "microsoft" else "."
     else:
-        reachable, error = await _check_reachable(provider)
+        reachable, error = await _check_reachable(provider, alias)
         if reachable:
-            scopes = await _get_scopes(provider)
+            scopes = await _get_scopes(provider, alias)
 
     return {
         "configured": configured,
@@ -179,6 +174,15 @@ async def _check_provider(provider: str, settings: Settings) -> dict:
         "expires_at": expires_at,
         "error": error,
     }
+
+
+async def _check_provider(provider: str, settings: Settings) -> dict:
+    """Status for a provider. Top-level fields describe the default ('main')
+    account (backwards compatible); `accounts` maps every alias to its own status."""
+    aliases = list_account_aliases(provider)
+    results = await asyncio.gather(*[_check_account(provider, a, settings) for a in aliases])
+    accounts = dict(zip(aliases, results))
+    return {**accounts[DEFAULT_ALIAS], "accounts": accounts}
 
 
 async def get_all_provider_status(settings: Settings) -> dict:
@@ -195,6 +199,7 @@ async def get_all_provider_status(settings: Settings) -> dict:
                 "scopes": [],
                 "expires_at": None,
                 "error": f"Status check failed: {str(e)[:200]}",
+                "accounts": {},
             }
 
     results = await asyncio.gather(*[safe_check(p) for p in PROVIDERS])
