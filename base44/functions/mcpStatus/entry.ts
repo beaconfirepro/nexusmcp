@@ -1,13 +1,21 @@
-Deno.serve(async (req) => {
+import { secrets } from 'base44:runtime';
+import { requireAdmin } from '../../shared/requireAdmin.ts';
+
+export default async function (req) {
   try {
-    const body = await req.json();
-    const { url } = body;
-    if (!url || (!url.startsWith('http://') && !url.startsWith('https://'))) {
-      return Response.json({ error: 'Missing or invalid url' }, { status: 400 });
+    const auth = await requireAdmin(req);
+    if (auth.error) return auth.error;
+
+    const baseUrl = (secrets.get('MCP_BASE_URL') || '').replace(/\/+$/, '');
+    if (!baseUrl) {
+      return Response.json({
+        ok: false,
+        error: 'MCP_BASE_URL is not configured.',
+        checked_at: new Date().toISOString(),
+      });
     }
 
-    const baseUrl = url.replace(/\/+$/, '');
-    const statusToken = Deno.env.get('STATUS_TOKEN');
+    const statusToken = secrets.get('STATUS_TOKEN');
     if (!statusToken) {
       return Response.json({
         ok: false,
@@ -16,15 +24,11 @@ Deno.serve(async (req) => {
       });
     }
 
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 15000);
-
     try {
       const resp = await fetch(`${baseUrl}/status`, {
         headers: { 'Authorization': `Bearer ${statusToken}` },
-        signal: controller.signal,
+        signal: AbortSignal.timeout(30000),
       });
-      clearTimeout(timeout);
       const data = await resp.json().catch(() => ({}));
 
       if (!resp.ok) {
@@ -43,7 +47,6 @@ Deno.serve(async (req) => {
         checked_at: data.checked_at || new Date().toISOString(),
       });
     } catch (fetchErr) {
-      clearTimeout(timeout);
       return Response.json({
         ok: false,
         error: fetchErr.message || 'Failed to reach MCP server /status endpoint.',
@@ -53,4 +56,4 @@ Deno.serve(async (req) => {
   } catch (error) {
     return Response.json({ error: error.message }, { status: 500 });
   }
-});
+}

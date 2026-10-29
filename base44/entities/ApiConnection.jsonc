@@ -1,0 +1,69 @@
+{
+  "name": "ApiConnection",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Human readable name for the API connection"
+    },
+    "slug": {
+      "type": "string",
+      "description": "Unique tool name, lowercase: ^[a-z][a-z0-9_]{1,30}$"
+    },
+    "base_url": {
+      "type": "string",
+      "description": "Base URL, must start with https://"
+    },
+    "auth_type": {
+      "type": "string",
+      "enum": [
+        "bearer",
+        "header",
+        "none"
+      ],
+      "default": "bearer"
+    },
+    "header_name": {
+      "type": "string",
+      "description": "Header name used when auth_type is header, e.g. X-API-KEY"
+    },
+    "secret": {
+      "type": "string",
+      "description": "API key or token (write-only in the UI)"
+    },
+    "enabled": {
+      "type": "boolean",
+      "default": true
+    },
+    "description": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "name",
+    "slug",
+    "base_url"
+  ],
+  "rls": {
+    "read": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "create": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "update": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "delete": {
+      "user_condition": {
+        "role": "admin"
+      }
+    }
+  }
+}

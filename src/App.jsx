@@ -10,10 +10,19 @@ import ScrollToTop from './components/ScrollToTop';
 import { Navigate } from 'react-router-dom';
 // Add page imports here
 import McpStatus from './pages/McpStatus';
+import Apis from './pages/Apis';
+import McpAuthorize from './pages/McpAuthorize';
 import Login from './pages/Login';
-import Register from './pages/Register';
 import ForgotPassword from './pages/ForgotPassword';
 import ResetPassword from './pages/ResetPassword';
+import AdminRoute from './components/AdminRoute';
+import DashboardLayout from './components/DashboardLayout';
+
+const loginRedirect = () => {
+  const target = window.location.pathname + window.location.search;
+  if (!target || target === '/') return '/login';
+  return `/login?returnTo=${encodeURIComponent(target)}`;
+};
 
 const AuthenticatedApp = () => {
   const { isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin } = useAuth();
@@ -42,12 +51,18 @@ const AuthenticatedApp = () => {
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
-      <Route path="/register" element={<Register />} />
       <Route path="/forgot-password" element={<ForgotPassword />} />
       <Route path="/reset-password" element={<ResetPassword />} />
-      <Route element={<ProtectedRoute unauthenticatedElement={<Navigate to="/login" replace />} />}>
-        <Route path="/" element={<McpStatus />} />
-        <Route path="/mcp-status" element={<McpStatus />} />
+      <Route element={<ProtectedRoute unauthenticatedElement={<Navigate to={loginRedirect()} replace />} />}>
+        <Route element={<AdminRoute />}>
+          <Route element={<DashboardLayout />}>
+            <Route path="/" element={<Navigate to="/status" replace />} />
+            <Route path="/status" element={<McpStatus />} />
+            <Route path="/mcp-status" element={<Navigate to="/status" replace />} />
+            <Route path="/apis" element={<Apis />} />
+          </Route>
+          <Route path="/mcp-authorize" element={<McpAuthorize />} />
+        </Route>
       </Route>
       <Route path="*" element={<PageNotFound />} />
     </Routes>
