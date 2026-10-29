@@ -15,7 +15,7 @@ from pydantic import Field
 class CheckConnectivityInput(BaseToolInput):
     providers: list[str] | None = Field(
         default=None,
-        description="Providers to check (default: all). Options: connecteam, qbo, hubspot, microsoft, google.",
+        description="Providers to check (default: all). Options: connecteam, qbo, hubspot, helm, microsoft, google.",
         examples=[["qbo", "google"]],
     )
 

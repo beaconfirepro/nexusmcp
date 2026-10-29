@@ -1,13 +1,14 @@
 # Multi-Account MCP Server
 
 A production Model Context Protocol (MCP) server that gives an AI agent unified,
-full read/write access to eight business services in a single session:
+full read/write access to nine business services in a single session:
 
 | Service | Provider Login | Auth Method |
 |---------|---------------|-------------|
 | Connecteam | `connecteam:main` | API key (`X-API-KEY` header) |
 | QuickBooks Online | `qbo:main` | OAuth 2.0 (refresh tokens rotate on every use) |
 | HubSpot | `hubspot:main` | Private-app access token (bearer) |
+| Helm | `helm:main` | Helm Public API v1 tenant API key (bearer) |
 | SharePoint | `microsoft:main` | Microsoft Graph delegated user OAuth |
 | Outlook Mail | `microsoft:main` | Microsoft Graph delegated user OAuth |
 | Outlook Calendar | `microsoft:main` | Microsoft Graph delegated user OAuth |
@@ -51,6 +52,7 @@ Aliases map to provider logins. The server ships with one login per provider:
 | `connecteam:main` | connecteam | `connecteam_*` tools |
 | `qbo:main` | qbo | `qbo_*` tools |
 | `hubspot:main` | hubspot | `hubspot_*` tools |
+| `helm:main` | helm | `helm_*` tools |
 | `microsoft:main` | microsoft | `sharepoint_*`, `outlook_*` tools |
 | `google:main` | google | `gmail_*`, `gcal_*` tools |
 
@@ -83,6 +85,8 @@ The app reads ALL static secrets from environment variables (see `.env.example`)
 | `STATUS_TOKEN` | Read-only bearer token for GET /status (separate from INBOUND_TOKEN) |
 | `CONNECTEAM_KEY` | Connecteam API key (sent as `X-API-KEY` header) |
 | `HUBSPOT_MAIN` | HubSpot private-app access token |
+| `HELM_API_KEY` | Helm Public API key (`helm_...`), made in Helm Tenant Admin > API keys. Its scopes decide what the `helm_*` tools may read and write |
+| `HELM_BASE_URL` | The Helm deploy to call, e.g. `https://helm.beaconfire.co` (production) or `https://dev.takesthehelm.com` |
 | `QBO_CLIENT_ID` | QuickBooks OAuth client ID |
 | `QBO_CLIENT_SECRET` | QuickBooks OAuth client secret |
 | `QBO_ENV` | `sandbox` or `production` (selects base URL) |
@@ -307,6 +311,7 @@ az containerapp secret set \
     STATUS_TOKEN="keyvault:https://<vault>.vault.azure.net/secrets/STATUS_TOKEN" \
     CONNECTEAM_KEY="keyvault:https://<vault>.vault.azure.net/secrets/CONNECTEAM_KEY" \
     HUBSPOT_MAIN="keyvault:https://<vault>.vault.azure.net/secrets/HUBSPOT_MAIN" \
+    HELM_API_KEY="keyvault:https://<vault>.vault.azure.net/secrets/HELM_API_KEY" \
     QBO_CLIENT_ID="keyvault:https://<vault>.vault.azure.net/secrets/QBO_CLIENT_ID" \
     QBO_CLIENT_SECRET="keyvault:https://<vault>.vault.azure.net/secrets/QBO_CLIENT_SECRET" \
     QBO_ENV="keyvault:https://<vault>.vault.azure.net/secrets/QBO_ENV" \
@@ -328,6 +333,8 @@ az containerapp update \
     STATUS_TOKEN=secretref:STATUS_TOKEN \
     CONNECTEAM_KEY=secretref:CONNECTEAM_KEY \
     HUBSPOT_MAIN=secretref:HUBSPOT_MAIN \
+    HELM_API_KEY=secretref:HELM_API_KEY \
+    HELM_BASE_URL=https://helm.beaconfire.co \
     QBO_CLIENT_ID=secretref:QBO_CLIENT_ID \
     QBO_CLIENT_SECRET=secretref:QBO_CLIENT_SECRET \
     QBO_ENV=secretref:QBO_ENV \
@@ -379,7 +386,7 @@ A live provider-status endpoint protected by a **separate read-only token**
 
 ### What it returns
 
-For each provider (connecteam, qbo, hubspot, microsoft, google):
+For each provider (connecteam, qbo, hubspot, helm, microsoft, google):
 
 | Field | Description |
 |-------|-------------|
@@ -387,7 +394,7 @@ For each provider (connecteam, qbo, hubspot, microsoft, google):
 | `seeded` | For OAuth providers: refresh token exists in Table Storage |
 | `reachable` | Result of a lightweight live auth ping |
 | `accounts` | Per-alias status (same fields) for every login of the provider, e.g. `microsoft:work2`. Top-level fields describe `main` |
-| `scopes` | Granted scopes (Google via tokeninfo, Microsoft from JWT `scp`, HubSpot via token-info, QBO fixed, Connecteam `api_key`) |
+| `scopes` | Granted scopes (Google via tokeninfo, Microsoft from JWT `scp`, HubSpot via token-info, Helm via `/api/v1/ping`, QBO fixed, Connecteam `api_key`) |
 | `expires_at` | Token expiry if applicable |
 | `error` | Short message if the ping failed (never leaks secrets) |
 
@@ -455,6 +462,7 @@ or test individually:
 | Connecteam | `connecteam_get_me` |
 | QBO | `qbo_query` (entity=Customer, limit=1) |
 | HubSpot | `hubspot_list_objects` (object_type=contacts, limit=1) |
+| Helm | `helm_ping` |
 | SharePoint | `sharepoint_list_sites` |
 | Outlook mail | `outlook_list_messages` (limit=1) |
 | Outlook calendar | `outlook_list_calendars` |
@@ -496,6 +504,11 @@ All write tools support `dry_run=true` to validate without executing.
 `hubspot_list_associations`, `hubspot_create_association`, `hubspot_create_note`,
 `hubspot_list_properties`, `hubspot_list_pipelines`, `hubspot_request`
 
+**Helm** (4): `helm_ping`, `helm_list`, `helm_get`, `helm_request`. Every Helm resource
+has one shape, so `helm_list` and `helm_get` take `resource` (jobs, companies, ...).
+Creates, updates, deletes, bulk loads and actions go through `helm_request`, with
+`qbo=skip|push` in `query` and an optional `idempotency_key`.
+
 **SharePoint** (8): `sharepoint_list_sites`, `sharepoint_get_site`, `sharepoint_list_drives`,
 `sharepoint_list_drive_items`, `sharepoint_upload_file`, `sharepoint_download_file`,
 `sharepoint_list_lists`, `sharepoint_list_list_items`
@@ -519,7 +532,7 @@ All write tools support `dry_run=true` to validate without executing.
 ### Escape-hatch tools (one per provider)
 
 Every provider has a generic `*_request` tool that can call ANY endpoint:
-`connecteam_request`, `qbo_request`, `hubspot_request`, `graph_request`, `google_request`.
+`connecteam_request`, `qbo_request`, `hubspot_request`, `helm_request`, `graph_request`, `google_request`.
 
 Each takes `method`, `path`, `query`, `body` and authenticates with the resolved
 account automatically. This guarantees full API coverage even without a typed tool.

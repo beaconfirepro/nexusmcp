@@ -10,7 +10,7 @@ const handleLogout = () => {
 };
 import ProviderCard from '@/components/mcp/ProviderCard';
 
-const PROVIDER_NAMES = ['connecteam', 'qbo', 'hubspot', 'microsoft', 'google'];
+const PROVIDER_NAMES = ['connecteam', 'qbo', 'hubspot', 'helm', 'microsoft', 'google'];
 
 const DEFAULT_SERVER_URL = 'https://multi-mcp.gentleplant-1d0fa284.eastus.azurecontainerapps.io';
 

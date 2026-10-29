@@ -6,7 +6,7 @@ Key Vault-reference secrets resolved with the attached managed identity.
 
 Env var contract (see .env.example for descriptions):
   STATUS_TOKEN, MCP_BASE_URL, OWNER_LOGIN_PASSWORD, JWT_SIGNING_KEY,
-  CONNECTEAM_KEY, HUBSPOT_MAIN,
+  CONNECTEAM_KEY, HUBSPOT_MAIN, HELM_API_KEY, HELM_BASE_URL,
   QBO_CLIENT_ID, QBO_CLIENT_SECRET, QBO_ENV,
   GRAPH_CLIENT_ID, GRAPH_CLIENT_SECRET, TENANT_ID,
   GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET,
@@ -24,6 +24,8 @@ REQUIRED_ENV_VARS = [
     "JWT_SIGNING_KEY",
     "CONNECTEAM_KEY",
     "HUBSPOT_MAIN",
+    "HELM_API_KEY",
+    "HELM_BASE_URL",
     "QBO_CLIENT_ID",
     "QBO_CLIENT_SECRET",
     "QBO_ENV",
@@ -48,6 +50,10 @@ class Settings:
     CONNECTEAM_KEY: str
     # HubSpot — https://developers.hubspot.com/docs/api/private-apps
     HUBSPOT_MAIN: str
+    # Helm Public API v1 — tenant API key (helm_...) and the Helm deploy it calls,
+    # e.g. https://helm.beaconfire.co
+    HELM_API_KEY: str
+    HELM_BASE_URL: str
     # QuickBooks Online — https://developer.intuit.com/app/developer/qbo/docs/develop/authentication-and-authorization/oauth-2.0
     QBO_CLIENT_ID: str
     QBO_CLIENT_SECRET: str
@@ -110,6 +116,10 @@ class Settings:
     def hubspot_base_url(self) -> str:
         return "https://api.hubapi.com"
 
+    @property
+    def helm_base_url(self) -> str:
+        return f"{self.HELM_BASE_URL.rstrip('/')}/api/v1"
+
 
 def load_settings() -> Settings:
     missing = [v for v in REQUIRED_ENV_VARS if not os.environ.get(v)]
@@ -130,6 +140,8 @@ def load_settings() -> Settings:
         JWT_SIGNING_KEY=os.environ["JWT_SIGNING_KEY"],
         CONNECTEAM_KEY=os.environ["CONNECTEAM_KEY"],
         HUBSPOT_MAIN=os.environ["HUBSPOT_MAIN"],
+        HELM_API_KEY=os.environ["HELM_API_KEY"],
+        HELM_BASE_URL=os.environ["HELM_BASE_URL"],
         QBO_CLIENT_ID=os.environ["QBO_CLIENT_ID"],
         QBO_CLIENT_SECRET=os.environ["QBO_CLIENT_SECRET"],
         QBO_ENV=qbo_env,

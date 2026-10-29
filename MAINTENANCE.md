@@ -1,7 +1,7 @@
 # Maintaining the NexusMCP Server — Operations & Security Guide
 
-This is the multi-account MCP server that gives an AI agent read/write access to eight business
-services (Connecteam, QuickBooks, HubSpot, SharePoint, Outlook Mail, Outlook Calendar, Gmail,
+This is the multi-account MCP server that gives an AI agent read/write access to nine business
+services (Connecteam, QuickBooks, HubSpot, Helm, SharePoint, Outlook Mail, Outlook Calendar, Gmail,
 Google Calendar) through one endpoint. This document is how you keep it running and what you must
 stay careful about.
 
@@ -44,8 +44,21 @@ az keyvault secret set --vault-name mcp-kv-beacon01 -n <secret-name> --value "<n
 # then bounce a new revision so it picks up the new version:
 az containerapp update -n multi-mcp -g mcp-rg --revision-suffix rot$(date +%s)
 ```
-Secret names: `inbound-token`, `status-token`, `connecteam-key`, `hubspot-main`,
+Secret names: `inbound-token`, `status-token`, `connecteam-key`, `hubspot-main`, `helm-api-key`,
 `qbo-client-secret`, `graph-client-secret`, `google-client-secret`.
+
+### Connect Helm (once, before the first deploy that carries the Helm provider)
+The server refuses to start without `HELM_API_KEY` and `HELM_BASE_URL`, so set both before that
+deploy. Make the key in Helm under Tenant Admin > API keys; its scopes decide what the `helm_*`
+tools may read and write.
+```bash
+az keyvault secret set --vault-name mcp-kv-beacon01 -n helm-api-key --value "helm_..."
+az containerapp secret set -n multi-mcp -g mcp-rg \
+  --secrets "helm-api-key=keyvaultref:https://mcp-kv-beacon01.vault.azure.net/secrets/helm-api-key,identityref:$(az identity show -n mcp-identity -g mcp-rg --query id -o tsv)"
+az containerapp update -n multi-mcp -g mcp-rg \
+  --set-env-vars HELM_API_KEY=secretref:helm-api-key HELM_BASE_URL=https://helm.beaconfire.co
+```
+Check it with the `helm_ping` tool or `GET /status`.
 
 ### Read logs when something breaks
 ```bash
@@ -60,7 +73,7 @@ az containerapp logs show -n multi-mcp -g mcp-rg --tail 80
 OAuth tokens (QBO / Microsoft / Google) sometimes need re-seeding — see the sign-in + code-exchange
 process you used during setup. Triggers: you revoked access, a refresh token went unused too long, or
 (Google) the OAuth app is in "Testing" mode so the token expires ~weekly. Static providers
-(Connecteam, HubSpot) never need re-seeding — just update the key in Key Vault if it changes.
+(Connecteam, HubSpot, Helm) never need re-seeding — just update the key in Key Vault if it changes.
 
 ### Add another account for a provider
 Add a new alias (e.g. `google:personal1`) to the registry config, then run the sign-in + seeding for

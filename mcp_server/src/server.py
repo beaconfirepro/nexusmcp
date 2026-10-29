@@ -50,6 +50,7 @@ logger.info("Settings loaded and provider clients initialized.")
 import tools.connecteam  # noqa: F401, E402
 import tools.qbo  # noqa: F401, E402
 import tools.hubspot  # noqa: F401, E402
+import tools.helm  # noqa: F401, E402
 import tools.graph  # noqa: F401, E402
 import tools.google  # noqa: F401, E402
 import tools.diagnostics  # noqa: F401, E402

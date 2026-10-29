@@ -5,7 +5,7 @@
 # To add more logins later, add new aliases here and seed their
 # OAuth refresh tokens via scripts/seed_oauth.py.
 #
-# Static-key providers (connecteam, hubspot) read their credentials
+# Static-key providers (connecteam, hubspot, helm) read their credentials
 # from env vars. OAuth providers (qbo, microsoft, google) store
 # refresh tokens in Azure Table Storage (PartitionKey=provider,
 # RowKey=alias), seeded via the OAuth script.
@@ -24,6 +24,10 @@ accounts:
   - alias: hubspot:main
     provider: hubspot
     description: "Primary HubSpot portal"
+
+  - alias: helm:main
+    provider: helm
+    description: "Helm tenant (Public API v1 key)"
 
   - alias: microsoft:main
     provider: microsoft
