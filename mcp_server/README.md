@@ -203,6 +203,20 @@ To seed a non-default alias: `python scripts/seed_oauth.py qbo --alias secondary
 
 ---
 
+## Connecting extra Microsoft accounts from the browser
+
+No local scripts needed. Once, add this **Web** redirect URI to the Entra app
+registration: `<MCP_BASE_URL>/connect/microsoft/callback`.
+
+Then for each account, open `<MCP_BASE_URL>/connect/microsoft`, enter an alias
+(e.g. `work2`) and the `OWNER_LOGIN_PASSWORD`, and sign in with that Microsoft
+account (the picker is always shown). The refresh token is stored as
+`microsoft:<alias>`; pass `account="microsoft:work2"` to `outlook_*` /
+`sharepoint_*` / `graph_request`. Re-running with an existing alias re-authorizes it.
+The accounts must be in the tenant set by `TENANT_ID`.
+
+---
+
 ## Local run
 
 ```bash
