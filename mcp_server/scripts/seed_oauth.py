@@ -216,6 +216,7 @@ async def seed_microsoft(alias: str = "main"):
         "redirect_uri": REDIRECT_URI,
         "response_type": "code",
         "response_mode": "query",
+        "prompt": "select_account",  # Don't silently reuse the browser's signed-in account when seeding extra aliases
         "state": secrets.token_urlsafe(16),
         "code_challenge": code_challenge,
         "code_challenge_method": "S256",
