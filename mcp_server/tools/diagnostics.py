@@ -1,11 +1,11 @@
 """
 Diagnostic MCP tool — check_provider_connectivity.
 Authenticated, on-demand deep health check (separate from GET /health).
-Makes ONE lightweight read call per provider to verify auth + connectivity.
+Makes ONE lightweight read call per provider account to verify auth + connectivity.
 """
 import asyncio
 
-from src.clients import get_client, resolve_account
+from src.status import PROVIDERS, _check_reachable, list_account_aliases
 from src.errors import format_response
 from src.mcp_instance import RO, mcp
 from src.models import BaseToolInput
@@ -25,61 +25,24 @@ class CheckConnectivityInput(BaseToolInput):
                       "This is the authenticated on-demand equivalent of a deep health check "
                       "(separate from GET /health which is unauthenticated and makes no outbound calls).")
 async def check_provider_connectivity(input: CheckConnectivityInput) -> str:
-    providers = input.providers or ["connecteam", "qbo", "hubspot", "microsoft", "google"]
+    providers = input.providers or list(PROVIDERS)
     results = {}
 
-    async def check_connecteam():
-        try:
-            client = get_client("connecteam")
-            await client.get_me()
-            results["connecteam"] = {"status": "ok"}
-        except Exception as e:
-            results["connecteam"] = {"status": "error", "message": str(e)[:200]}
+    async def check_provider(provider: str):
+        # One lightweight read per account; OAuth providers may have several logins.
+        aliases = list_account_aliases(provider)
+        accounts = {}
+        for alias in aliases:
+            ok, err = await _check_reachable(provider, alias)
+            accounts[alias] = {"status": "ok"} if ok else {"status": "error", "message": err}
+        entry = {"status": "ok" if all(a["status"] == "ok" for a in accounts.values()) else "error"}
+        if len(accounts) > 1:
+            entry["accounts"] = accounts
+        else:
+            entry.update(next(iter(accounts.values())))
+        results[provider] = entry
 
-    async def check_qbo():
-        try:
-            client = get_client("qbo")
-            alias = resolve_account("qbo", None)
-            await client.query_entity("Customer", alias, limit=1)
-            results["qbo"] = {"status": "ok"}
-        except Exception as e:
-            results["qbo"] = {"status": "error", "message": str(e)[:200]}
-
-    async def check_hubspot():
-        try:
-            client = get_client("hubspot")
-            await client.list_objects("contacts", limit=1)
-            results["hubspot"] = {"status": "ok"}
-        except Exception as e:
-            results["hubspot"] = {"status": "error", "message": str(e)[:200]}
-
-    async def check_microsoft():
-        try:
-            client = get_client("microsoft")
-            alias = resolve_account("microsoft", None)
-            await client.list_calendars(alias, limit=1)
-            results["microsoft"] = {"status": "ok"}
-        except Exception as e:
-            results["microsoft"] = {"status": "error", "message": str(e)[:200]}
-
-    async def check_google():
-        try:
-            client = get_client("google")
-            alias = resolve_account("google", None)
-            await client.list_calendars(alias)
-            results["google"] = {"status": "ok"}
-        except Exception as e:
-            results["google"] = {"status": "error", "message": str(e)[:200]}
-
-    checker_map = {
-        "connecteam": check_connecteam,
-        "qbo": check_qbo,
-        "hubspot": check_hubspot,
-        "microsoft": check_microsoft,
-        "google": check_google,
-    }
-
-    tasks = [checker_map[p]() for p in providers if p in checker_map]
+    tasks = [check_provider(p) for p in providers if p in PROVIDERS]
     await asyncio.gather(*tasks)
 
     return format_response(results, input.response_format)

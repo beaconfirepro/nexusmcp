@@ -35,6 +35,7 @@ from src.oauth_routes import (
     authorize,
     token as oauth_token,
 )
+from src.connect_routes import connect_microsoft, connect_microsoft_callback
 from src.status import get_all_provider_status
 
 logger = logging.getLogger("mcp_server")
@@ -103,6 +104,8 @@ app = Starlette(
         Route("/register", oauth_register, methods=["POST"]),
         Route("/authorize", authorize, methods=["GET", "POST"]),
         Route("/token", oauth_token, methods=["POST"]),
+        Route("/connect/microsoft", connect_microsoft, methods=["GET", "POST"]),
+        Route("/connect/microsoft/callback", connect_microsoft_callback, methods=["GET"]),
         Mount("/", app=mcp_app),
     ],
     lifespan=mcp_app.router.lifespan_context,

@@ -4,6 +4,7 @@ Inbound auth middleware — OAuth 2.1 JWT validation for /mcp.
   - /health: OPEN (unauthenticated, for ACA liveness probes)
   - /status: requires STATUS_TOKEN (read-only, separate from OAuth)
   - OAuth endpoints (/authorize, /token, /register, /.well-known/*): OPEN
+  - /connect/microsoft[/callback]: OPEN (gated by the owner password in the handler)
   - /mcp: requires a valid OAuth 2.1 JWT access token
   - Everything else: pass through (MCP app returns 404 for unknown paths)
 
@@ -34,6 +35,8 @@ _OPEN_PATHS = frozenset({
     "/register",
     "/authorize",
     "/token",
+    "/connect/microsoft",
+    "/connect/microsoft/callback",
 })
 
 
