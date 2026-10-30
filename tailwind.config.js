@@ -44,11 +44,12 @@ module.exports = {
   			input: 'hsl(var(--input))',
   			ring: 'hsl(var(--ring))',
   			brand: {
-  				50: '#FFFBEB',
-  				100: '#FEF3C7',
-  				400: '#F59E0B',
-  				600: '#D97706',
-  				900: '#451A03'
+  				50: '#EEFEFF',
+  				100: '#C8FBFB',
+  				400: '#00C2C3',
+  				500: '#FFC800',
+  				600: '#00A3A4',
+  				900: '#1E2047'
   			},
   			chart: {
   				'1': 'hsl(var(--chart-1))',
