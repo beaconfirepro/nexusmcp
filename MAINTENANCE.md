@@ -70,11 +70,15 @@ az keyvault secret set --vault-name mcp-kv-beacon01 -n nexus-bridge-secret --val
 az containerapp secret set -n multi-mcp -g mcp-rg \
   --secrets "nexus-bridge-secret=keyvaultref:https://mcp-kv-beacon01.vault.azure.net/secrets/nexus-bridge-secret,identityref:$(az identity show -n mcp-identity -g mcp-rg --query id -o tsv)"
 az containerapp update -n multi-mcp -g mcp-rg \
-  --set-env-vars NEXUS_BRIDGE_SECRET=secretref:nexus-bridge-secret NEXUS_APP_URL=https://nexus-beacon.base44.app \
-  --remove-env-vars OWNER_LOGIN_PASSWORD
+  --set-env-vars NEXUS_BRIDGE_SECRET=secretref:nexus-bridge-secret NEXUS_APP_URL=https://nexus-beacon.base44.app
 echo "$SECRET"   # paste into the Base44 app's secrets as NEXUS_BRIDGE_SECRET, then clear your terminal
 ```
-Then delete the old owner-password secret from Key Vault.
+Keep `OWNER_LOGIN_PASSWORD` until the new code is live: the running revision still needs it to
+start. Once the deploy has rolled out and sign-in through the web app works, remove it:
+```bash
+az containerapp update -n multi-mcp -g mcp-rg --remove-env-vars OWNER_LOGIN_PASSWORD
+```
+then delete the old owner-password secret from Key Vault.
 
 ### Read logs when something breaks
 ```bash
