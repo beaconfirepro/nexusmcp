@@ -5,8 +5,8 @@ Container Apps injects Key Vault secret values as env vars via
 Key Vault-reference secrets resolved with the attached managed identity.
 
 Env var contract (see .env.example for descriptions):
-  STATUS_TOKEN, MCP_BASE_URL, OWNER_LOGIN_PASSWORD, JWT_SIGNING_KEY,
-  CONNECTEAM_KEY, HUBSPOT_MAIN,
+  STATUS_TOKEN, MCP_BASE_URL, NEXUS_APP_URL, NEXUS_BRIDGE_SECRET, JWT_SIGNING_KEY,
+  CONNECTEAM_KEY, HUBSPOT_MAIN, HELM_API_KEY, HELM_BASE_URL,
   QBO_CLIENT_ID, QBO_CLIENT_SECRET, QBO_ENV,
   GRAPH_CLIENT_ID, GRAPH_CLIENT_SECRET, TENANT_ID,
   GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET,
@@ -20,10 +20,13 @@ VERSION = "1.0.0"
 REQUIRED_ENV_VARS = [
     "STATUS_TOKEN",
     "MCP_BASE_URL",
-    "OWNER_LOGIN_PASSWORD",
+    "NEXUS_APP_URL",
+    "NEXUS_BRIDGE_SECRET",
     "JWT_SIGNING_KEY",
     "CONNECTEAM_KEY",
     "HUBSPOT_MAIN",
+    "HELM_API_KEY",
+    "HELM_BASE_URL",
     "QBO_CLIENT_ID",
     "QBO_CLIENT_SECRET",
     "QBO_ENV",
@@ -42,12 +45,17 @@ class Settings:
     # Inbound auth — OAuth 2.1 authorization server
     STATUS_TOKEN: str            # Read-only token for GET /status (separate from OAuth)
     MCP_BASE_URL: str            # Public base URL, e.g. https://multi-mcp.xxx.eastus.azurecontainerapps.io
-    OWNER_LOGIN_PASSWORD: str    # Single-owner password for /authorize login screen
+    NEXUS_APP_URL: str           # The Nexus web app (Base44), where the owner signs in, e.g. https://nexus-beacon.base44.app
+    NEXUS_BRIDGE_SECRET: str     # Shared with the Base44 app: signs sign-in approvals and guards nexusApiConnections
     JWT_SIGNING_KEY: str         # HS256 signing key for JWT access tokens
     # Connecteam — https://developer.connecteam.com/docs/authentication-1
     CONNECTEAM_KEY: str
     # HubSpot — https://developers.hubspot.com/docs/api/private-apps
     HUBSPOT_MAIN: str
+    # Helm Public API v1 — tenant API key (helm_...) and the Helm deploy it calls,
+    # e.g. https://helm.beaconfire.co
+    HELM_API_KEY: str
+    HELM_BASE_URL: str
     # QuickBooks Online — https://developer.intuit.com/app/developer/qbo/docs/develop/authentication-and-authorization/oauth-2.0
     QBO_CLIENT_ID: str
     QBO_CLIENT_SECRET: str
@@ -110,6 +118,10 @@ class Settings:
     def hubspot_base_url(self) -> str:
         return "https://api.hubapi.com"
 
+    @property
+    def helm_base_url(self) -> str:
+        return f"{self.HELM_BASE_URL.rstrip('/')}/api/v1"
+
 
 def load_settings() -> Settings:
     missing = [v for v in REQUIRED_ENV_VARS if not os.environ.get(v)]
@@ -126,10 +138,13 @@ def load_settings() -> Settings:
     return Settings(
         STATUS_TOKEN=os.environ["STATUS_TOKEN"],
         MCP_BASE_URL=os.environ["MCP_BASE_URL"],
-        OWNER_LOGIN_PASSWORD=os.environ["OWNER_LOGIN_PASSWORD"],
+        NEXUS_APP_URL=os.environ["NEXUS_APP_URL"],
+        NEXUS_BRIDGE_SECRET=os.environ["NEXUS_BRIDGE_SECRET"],
         JWT_SIGNING_KEY=os.environ["JWT_SIGNING_KEY"],
         CONNECTEAM_KEY=os.environ["CONNECTEAM_KEY"],
         HUBSPOT_MAIN=os.environ["HUBSPOT_MAIN"],
+        HELM_API_KEY=os.environ["HELM_API_KEY"],
+        HELM_BASE_URL=os.environ["HELM_BASE_URL"],
         QBO_CLIENT_ID=os.environ["QBO_CLIENT_ID"],
         QBO_CLIENT_SECRET=os.environ["QBO_CLIENT_SECRET"],
         QBO_ENV=qbo_env,

@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { base44 } from '@/api/base44Client';
 import ProviderCard from '@/components/mcp/ProviderCard';
 
-const PROVIDER_NAMES = ['connecteam', 'qbo', 'hubspot', 'microsoft', 'google'];
+const PROVIDER_NAMES = ['connecteam', 'qbo', 'hubspot', 'helm', 'microsoft', 'google'];
 
 export default function McpStatus() {
   const [serverUrl, setServerUrl] = useState('');

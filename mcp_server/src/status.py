@@ -20,7 +20,7 @@ from src.config import Settings
 
 logger = logging.getLogger("mcp_server.status")
 
-PROVIDERS = ["connecteam", "qbo", "hubspot", "microsoft", "google"]
+PROVIDERS = ["connecteam", "qbo", "hubspot", "helm", "microsoft", "google"]
 
 
 def _is_configured(provider: str, settings: Settings) -> bool:
@@ -28,6 +28,7 @@ def _is_configured(provider: str, settings: Settings) -> bool:
     checks = {
         "connecteam": bool(settings.CONNECTEAM_KEY),
         "hubspot": bool(settings.HUBSPOT_MAIN),
+        "helm": bool(settings.HELM_API_KEY and settings.HELM_BASE_URL),
         "qbo": bool(settings.QBO_CLIENT_ID and settings.QBO_CLIENT_SECRET),
         "microsoft": bool(settings.GRAPH_CLIENT_ID and settings.GRAPH_CLIENT_SECRET),
         "google": bool(settings.GOOGLE_CLIENT_ID and settings.GOOGLE_CLIENT_SECRET),
@@ -73,6 +74,8 @@ async def _check_reachable(provider: str, alias: str) -> tuple[bool, str | None]
             await get_client("qbo").query_entity("Customer", alias, limit=1)
         elif provider == "hubspot":
             await get_client("hubspot").list_objects("contacts", limit=1)
+        elif provider == "helm":
+            await get_client("helm").ping()
         elif provider == "microsoft":
             await get_client("microsoft").list_calendars(alias, limit=1)
         elif provider == "google":
@@ -102,6 +105,10 @@ async def _get_scopes(provider: str, alias: str) -> list[str]:
         except Exception:
             pass
         return []
+
+    if provider == "helm":
+        # The key's scopes, from GET /api/v1/ping
+        return (await get_client("helm").ping())["scopes"]
 
     if provider == "microsoft":
         # Decode the access token JWT's scp claim

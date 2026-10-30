@@ -25,6 +25,10 @@ MAX_BACKOFF = 30.0
 class BaseProviderClient:
     """Base for all provider clients. Handles HTTP, retries, errors."""
 
+    # What to do about a 401. Static-key providers override it.
+    AUTH_HINT = ("The OAuth token may have expired. The OAuth refresh helper should retry. "
+                 "If this persists, re-run scripts/seed_oauth.py to obtain a new refresh token.")
+
     def __init__(self, provider: str, base_url: str):
         self.provider = provider
         self.base_url = base_url.rstrip("/")
@@ -92,13 +96,12 @@ class BaseProviderClient:
 
             # 401 → auth expired (caller should handle token refresh)
             if resp.status_code == 401:
+                body = self._safe_body(resp)
                 raise ProviderError(
-                    f"Authentication failed for {self.provider} (401). "
-                    f"The OAuth token may have expired.",
+                    f"Authentication failed for {self.provider} (401): {body[:200]}",
                     provider=self.provider,
                     status_code=401,
-                    hint="The OAuth refresh helper should retry. If this persists, "
-                         "re-run scripts/seed_oauth.py to obtain a new refresh token.",
+                    hint=self.AUTH_HINT,
                 )
 
             # 403 → wrong scope

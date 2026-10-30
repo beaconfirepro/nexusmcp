@@ -5,7 +5,7 @@ provider, it defaults to that provider's single registered alias.
 Unknown alias -> actionable error listing valid aliases.
 
 Providers and their starting single login:
-  connecteam:main   qbo:main   hubspot:main
+  connecteam:main   qbo:main   hubspot:main   helm:main
   microsoft:main    (Graph: SharePoint + Outlook mail + Outlook calendar)
   google:main       (Gmail + Google Calendar)
 
@@ -24,6 +24,7 @@ DEFAULT_ALIASES: dict[str, str] = {
     "connecteam": "connecteam:main",
     "qbo": "qbo:main",
     "hubspot": "hubspot:main",
+    "helm": "helm:main",
     "microsoft": "microsoft:main",
     "google": "google:main",
 }
@@ -33,6 +34,7 @@ TOOL_PREFIX_TO_PROVIDER: dict[str, str] = {
     "connecteam": "connecteam",
     "qbo": "qbo",
     "hubspot": "hubspot",
+    "helm": "helm",
     "sharepoint": "microsoft",
     "outlook": "microsoft",
     "gmail": "google",
@@ -76,7 +78,7 @@ class AccountRegistry:
             # Return the normalized alias (just the alias part, not "provider:alias")
             return account if ":" in account else f"{provider}:{account}"
 
-        # For static-key providers (connecteam, hubspot), validate against defaults
+        # For static-key providers (connecteam, hubspot, helm), validate against defaults
         if account in DEFAULT_ALIASES.values() or account == DEFAULT_ALIASES.get(provider, "").split(":")[-1]:
             return account if ":" in account else f"{provider}:{account}"
 

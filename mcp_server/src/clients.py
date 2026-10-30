@@ -65,6 +65,8 @@ def init_clients(settings: Settings):
     from src.providers.connecteam import ConnecteamClient
     from src.providers.qbo import QboClient
     from src.providers.hubspot import HubSpotClient
+    from src.providers.helm import HelmClient
+    from src.providers.custom import CustomApiClient
     from src.providers.graph import GraphClient
     from src.providers.google import GoogleClient
 
@@ -80,6 +82,18 @@ def init_clients(settings: Settings):
     _clients["hubspot"] = HubSpotClient(
         access_token=settings.HUBSPOT_MAIN,
         base_url=settings.hubspot_base_url,
+    )
+
+    # Helm — Public API v1 tenant API key (bearer); the key decides the tenant
+    _clients["helm"] = HelmClient(
+        api_key=settings.HELM_API_KEY,
+        base_url=settings.helm_base_url,
+    )
+
+    # Custom APIs — added with "Add an API" in the Nexus web app, read per call
+    _clients["custom"] = CustomApiClient(
+        app_url=settings.NEXUS_APP_URL,
+        bridge_secret=settings.NEXUS_BRIDGE_SECRET,
     )
 
     # QuickBooks Online — OAuth 2.0

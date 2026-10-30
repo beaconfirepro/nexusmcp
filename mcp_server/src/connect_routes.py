@@ -3,11 +3,13 @@ Browser-based Microsoft account connection — lets the owner add Outlook /
 SharePoint logins (aliases) without running scripts/seed_oauth.py locally.
 
 Endpoints:
-  - GET  /connect/microsoft            — form: alias + owner password
-  - POST /connect/microsoft            — verify password, redirect to Microsoft sign-in
+  - GET  /connect/microsoft            — form: alias
+  - POST /connect/microsoft            — check alias, send the owner to sign in on the Nexus web app
+  - (via /authorize/bridge)            — approved: redirect to Microsoft sign-in
   - GET  /connect/microsoft/callback   — exchange code, store refresh token under the alias
 
-Gated by OWNER_LOGIN_PASSWORD (same as /authorize). The server is stateless, so
+Gated by the owner's sign-in on the Nexus web app (same as /authorize, see
+src/bridge.py). The server is stateless, so
 the PKCE verifier and state travel in a short-lived signed, HttpOnly cookie.
 
 Requires this redirect URI on the Entra app registration:
@@ -27,6 +29,7 @@ import jwt
 from starlette.requests import Request
 from starlette.responses import HTMLResponse, RedirectResponse
 
+from src.bridge import redirect_to_sign_in
 from src.clients import get_oauth_config, get_token_store
 
 logger = logging.getLogger("mcp_server.connect_routes")
@@ -48,7 +51,7 @@ body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; 
 h1 {{ font-size: 1.5rem; margin-bottom: 0.5rem; color: #f8fafc; }}
 p.sub {{ font-size: 0.875rem; color: #94a3b8; margin-bottom: 1.5rem; }}
 label {{ display: block; font-size: 0.8rem; font-weight: 500; color: #cbd5e1; margin: 1rem 0 0.5rem; }}
-input[type=text], input[type=password] {{ width: 100%; padding: 0.75rem 1rem; border: 1px solid #475569; border-radius: 8px; background: #0f172a; color: #f1f5f9; font-size: 1rem; }}
+input[type=text] {{ width: 100%; padding: 0.75rem 1rem; border: 1px solid #475569; border-radius: 8px; background: #0f172a; color: #f1f5f9; font-size: 1rem; }}
 input:focus {{ outline: none; border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59,130,246,0.15); }}
 button {{ width: 100%; padding: 0.75rem; border: none; border-radius: 8px; background: #3b82f6; color: #fff; font-size: 1rem; font-weight: 600; cursor: pointer; margin-top: 1.5rem; }}
 button:hover {{ background: #2563eb; }}
@@ -67,9 +70,7 @@ _FORM = """<h1>🔗 Connect Microsoft account</h1>
 <form method="POST" action="{action}">
   <label for="alias">Alias</label>
   <input type="text" id="alias" name="alias" value="{alias}" placeholder="work2" pattern="[a-z0-9][a-z0-9_-]{{0,31}}" required />
-  <label for="pw">Owner Password</label>
-  <input type="password" id="pw" name="password" autocomplete="current-password" required />
-  <button type="submit">Continue to Microsoft</button>
+  <button type="submit">Sign in to Nexus, then Microsoft</button>
 </form>
 {error}"""
 
@@ -102,14 +103,18 @@ async def connect_microsoft(request: Request):
 
     form = await request.form()
     alias = str(form.get("alias", "")).strip().lower()
-    password = str(form.get("password", ""))
-
-    if not secrets.compare_digest(password.encode(), s.OWNER_LOGIN_PASSWORD.encode()):
-        logger.warning("Incorrect owner password on /connect/microsoft")
-        return _form(request, alias, "Incorrect password. Please try again.", 401)
     if not _ALIAS_RE.match(alias):
         return _form(request, alias, "Alias must be 1-32 chars: lowercase letters, digits, '-' or '_'.", 400)
 
+    return redirect_to_sign_in(
+        s, {"kind": "connect_microsoft", "alias": alias},
+        purpose=f"Connect a Microsoft account to Nexus as microsoft:{alias}",
+    )
+
+
+def start_microsoft_sign_in(request: Request, alias: str) -> RedirectResponse:
+    """The owner approved on the Nexus web app: go on to Microsoft sign-in."""
+    s = request.app.state.settings
     code_verifier = secrets.token_urlsafe(48)
     state = secrets.token_urlsafe(16)
     code_challenge = base64.urlsafe_b64encode(
