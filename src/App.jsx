@@ -11,6 +11,7 @@ import { Navigate } from 'react-router-dom';
 // Add page imports here
 import McpStatus from './pages/McpStatus';
 import Apis from './pages/Apis';
+import Accounts from './pages/Accounts';
 import McpAuthorize from './pages/McpAuthorize';
 import Login from './pages/Login';
 import ForgotPassword from './pages/ForgotPassword';
@@ -59,6 +60,7 @@ const AuthenticatedApp = () => {
             <Route path="/" element={<Navigate to="/status" replace />} />
             <Route path="/status" element={<McpStatus />} />
             <Route path="/mcp-status" element={<Navigate to="/status" replace />} />
+            <Route path="/accounts" element={<Accounts />} />
             <Route path="/apis" element={<Apis />} />
           </Route>
           <Route path="/mcp-authorize" element={<McpAuthorize />} />

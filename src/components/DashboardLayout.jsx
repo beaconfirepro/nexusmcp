@@ -1,12 +1,13 @@
 import React from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
-import { Activity, Plug, LogOut, Server } from 'lucide-react';
+import { Activity, Plug, LogOut, Server, Users } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/lib/AuthContext';
 import { base44 } from '@/api/base44Client';
 
 const NAV_ITEMS = [
   { to: '/status', label: 'Status', icon: Activity },
+  { to: '/accounts', label: 'Accounts', icon: Users },
   { to: '/apis', label: 'APIs', icon: Plug },
 ];
 
