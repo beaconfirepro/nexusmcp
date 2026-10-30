@@ -214,8 +214,8 @@ To seed a non-default alias: `python scripts/seed_oauth.py qbo --alias secondary
 No local scripts needed. Once, add this **Web** redirect URI to the Entra app
 registration: `<MCP_BASE_URL>/connect/microsoft/callback`.
 
-Then for each account, open `<MCP_BASE_URL>/connect/microsoft`, enter an alias
-(e.g. `work2`), approve it on the Nexus web app (signed in as an admin), and sign in
+Then for each account, click **Add an account** on the Accounts page of the Nexus web app
+(or open `<MCP_BASE_URL>/connect/microsoft`), enter an alias (e.g. `work2`), approve it on the Nexus web app (signed in as an admin), and sign in
 with that Microsoft account (the picker is always shown). The refresh token is stored as
 `microsoft:<alias>`; pass `account="microsoft:work2"` to `outlook_*` /
 `sharepoint_*` / `graph_request`. Re-running with an existing alias re-authorizes it.
