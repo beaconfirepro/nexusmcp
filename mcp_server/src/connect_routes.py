@@ -3,7 +3,8 @@ Browser-based Microsoft account connection — lets the owner add Outlook /
 SharePoint logins (aliases) without running scripts/seed_oauth.py locally.
 
 Endpoints:
-  - GET  /connect/microsoft            — form: alias
+  - GET  /connect/microsoft            — form: alias (or ?alias=, from the web app's
+                                         "Add an account" button, which skips the form)
   - POST /connect/microsoft            — check alias, send the owner to sign in on the Nexus web app
   - (via /authorize/bridge)            — approved: redirect to Microsoft sign-in
   - GET  /connect/microsoft/callback   — exchange code, store refresh token under the alias
@@ -98,11 +99,15 @@ def _form(request: Request, alias: str = "", error: str = "", status_code: int =
 async def connect_microsoft(request: Request):
     s = request.app.state.settings
 
+    # The web app's "Add an account" button sends the alias in the link (?alias=);
+    # without one, show the form.
     if request.method == "GET":
-        return _form(request)
-
-    form = await request.form()
-    alias = str(form.get("alias", "")).strip().lower()
+        alias = request.query_params.get("alias", "").strip().lower()
+        if not alias:
+            return _form(request)
+    else:
+        form = await request.form()
+        alias = str(form.get("alias", "")).strip().lower()
     if not _ALIAS_RE.match(alias):
         return _form(request, alias, "Alias must be 1-32 chars: lowercase letters, digits, '-' or '_'.", 400)
 
