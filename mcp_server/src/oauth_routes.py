@@ -5,19 +5,18 @@ Endpoints:
   - GET  /.well-known/oauth-authorization-server  — AS metadata (RFC 8414)
   - GET  /.well-known/oauth-protected-resource     — PR metadata (RFC 9728)
   - POST /register                                  — Dynamic Client Registration (RFC 7591)
-  - GET  /authorize                                 — Authorization endpoint (login form)
-  - POST /authorize                                 — Process login, issue auth code
+  - GET  /authorize                                 — Authorization endpoint (sends the owner to
+                                                      the Nexus web app to sign in; see src/bridge.py)
   - POST /token                                     — Token endpoint (code + refresh grants)
 """
-import json
-import base64
 import secrets
 import logging
 import urllib.parse
 
 from starlette.requests import Request
-from starlette.responses import JSONResponse, HTMLResponse, RedirectResponse
+from starlette.responses import JSONResponse, RedirectResponse
 
+from src.bridge import redirect_to_sign_in
 from src.oauth_server import issue_access_token, verify_pkce, ACCESS_TOKEN_TTL
 from src.oauth_store import (
     register_client,
@@ -98,107 +97,64 @@ async def register(request: Request):
 
 
 # ── Authorization Endpoint ──
-_LOGIN_HTML = """<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>NexusMCP — Owner Login</title>
-<style>
-* {{ margin: 0; padding: 0; box-sizing: border-box; }}
-body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0f172a; color: #e2e8f0; display: flex; justify-content: center; align-items: center; min-height: 100vh; }}
-.card {{ background: #1e293b; border: 1px solid #334155; border-radius: 16px; padding: 2.5rem; width: 100%; max-width: 380px; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5); }}
-h1 {{ font-size: 1.5rem; margin-bottom: 0.5rem; color: #f8fafc; }}
-p.sub {{ font-size: 0.875rem; color: #94a3b8; margin-bottom: 1.5rem; }}
-label {{ display: block; font-size: 0.8rem; font-weight: 500; color: #cbd5e1; margin-bottom: 0.5rem; }}
-input[type=password] {{ width: 100%; padding: 0.75rem 1rem; border: 1px solid #475569; border-radius: 8px; background: #0f172a; color: #f1f5f9; font-size: 1rem; }}
-input[type=password]:focus {{ outline: none; border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59,130,246,0.15); }}
-button {{ width: 100%; padding: 0.75rem; border: none; border-radius: 8px; background: #3b82f6; color: #fff; font-size: 1rem; font-weight: 600; cursor: pointer; margin-top: 1.5rem; transition: background 0.15s; }}
-button:hover {{ background: #2563eb; }}
-.error {{ color: #f87171; font-size: 0.85rem; margin-top: 1rem; text-align: center; }}
-</style>
-</head>
-<body>
-<div class="card">
-  <h1>🔐 NexusMCP</h1>
-  <p class="sub">Enter your owner password to authorize this connection.</p>
-  <form method="POST" action="{action}">
-    <input type="hidden" name="d" value="{d}" />
-    <label for="pw">Owner Password</label>
-    <input type="password" id="pw" name="password" autocomplete="current-password" autofocus required />
-    <button type="submit">Authorize Access</button>
-  </form>
-  {error_block}
-</div>
-</body>
-</html>"""
-
-
+# The owner signs in on the Nexus web app (Base44), not here: see src/bridge.py.
 async def authorize(request: Request):
     s = request.app.state.settings
-    base = _base_url(s)
+    params = dict(request.query_params)
+    client_id = params.get("client_id")
+    redirect_uri = params.get("redirect_uri")
+    response_type = params.get("response_type")
+    code_challenge = params.get("code_challenge")
+    code_challenge_method = params.get("code_challenge_method", "S256")
 
-    if request.method == "GET":
-        params = dict(request.query_params)
-        client_id = params.get("client_id")
-        redirect_uri = params.get("redirect_uri")
-        response_type = params.get("response_type")
-        code_challenge = params.get("code_challenge")
-        code_challenge_method = params.get("code_challenge_method", "S256")
-
-        if not all([client_id, redirect_uri, response_type, code_challenge]):
-            return JSONResponse(
-                {"error": "invalid_request",
-                 "error_description": "Missing required parameters (client_id, redirect_uri, response_type, code_challenge)"},
-                status_code=400,
-            )
-        if response_type != "code":
-            return JSONResponse(
-                {"error": "unsupported_response_type", "error_description": "Only 'code' is supported"},
-                status_code=400,
-            )
-        if code_challenge_method != "S256":
-            return JSONResponse(
-                {"error": "invalid_request", "error_description": "Only S256 code_challenge_method is supported"},
-                status_code=400,
-            )
-
-        d = base64.urlsafe_b64encode(json.dumps(params).encode()).decode()
-        return HTMLResponse(_LOGIN_HTML.format(action=f"{base}/authorize", d=d, error_block=""))
-
-    # POST — verify password, issue code
-    form = await request.form()
-    password = form.get("password", "")
-    d = form.get("d", "")
-
-    try:
-        params = json.loads(base64.urlsafe_b64decode(d).decode())
-    except Exception:
-        return HTMLResponse("Invalid request payload.", status_code=400)
-
-    if not secrets.compare_digest(password, s.OWNER_LOGIN_PASSWORD):
-        new_d = base64.urlsafe_b64encode(json.dumps(params).encode()).decode()
-        err = '<p class="error">Incorrect password. Please try again.</p>'
-        return HTMLResponse(
-            _LOGIN_HTML.format(action=f"{base}/authorize", d=new_d, error_block=err),
-            status_code=401,
+    if not all([client_id, redirect_uri, response_type, code_challenge]):
+        return JSONResponse(
+            {"error": "invalid_request",
+             "error_description": "Missing required parameters (client_id, redirect_uri, response_type, code_challenge)"},
+            status_code=400,
+        )
+    if response_type != "code":
+        return JSONResponse(
+            {"error": "unsupported_response_type", "error_description": "Only 'code' is supported"},
+            status_code=400,
+        )
+    if code_challenge_method != "S256":
+        return JSONResponse(
+            {"error": "invalid_request", "error_description": "Only S256 code_challenge_method is supported"},
+            status_code=400,
         )
 
+    return redirect_to_sign_in(
+        s, {"kind": "authorize", "params": params},
+        purpose=f"Connect an AI client to Nexus ({params.get('client_id')})",
+    )
+
+
+def _redirect_with(redirect_uri: str, query: dict) -> RedirectResponse:
+    sep = "&" if "?" in redirect_uri else "?"
+    return RedirectResponse(f"{redirect_uri}{sep}{urllib.parse.urlencode(query)}", status_code=302)
+
+
+def finish_authorize(params: dict, owner: str) -> RedirectResponse:
+    """The owner approved: issue the code and send it to the client."""
     code = create_auth_code(
         params.get("client_id"),
         params.get("redirect_uri"),
         params.get("code_challenge"),
         params.get("code_challenge_method", "S256"),
     )
+    logger.info("Authorized client %s for %s", params.get("client_id"), owner)
+    query = {"code": code}
+    if params.get("state"):
+        query["state"] = params["state"]
+    return _redirect_with(params["redirect_uri"], query)
 
-    redirect_uri = params["redirect_uri"]
-    sep = "&" if "?" in redirect_uri else "?"
-    redirect_url = f"{redirect_uri}{sep}code={urllib.parse.quote(code)}"
-    state = params.get("state")
-    if state:
-        redirect_url += f"&state={urllib.parse.quote(state)}"
 
-    return RedirectResponse(redirect_url, status_code=302)
+def deny_authorize(params: dict) -> RedirectResponse:
+    query = {"error": "access_denied"}
+    if params.get("state"):
+        query["state"] = params["state"]
+    return _redirect_with(params["redirect_uri"], query)
 
 
 # ── Token Endpoint ──

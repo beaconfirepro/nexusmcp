@@ -36,6 +36,7 @@ from src.oauth_routes import (
     token as oauth_token,
 )
 from src.connect_routes import connect_microsoft, connect_microsoft_callback
+from src.bridge_routes import authorize_bridge
 from src.status import get_all_provider_status
 
 logger = logging.getLogger("mcp_server")
@@ -51,6 +52,7 @@ import tools.connecteam  # noqa: F401, E402
 import tools.qbo  # noqa: F401, E402
 import tools.hubspot  # noqa: F401, E402
 import tools.helm  # noqa: F401, E402
+import tools.custom  # noqa: F401, E402
 import tools.graph  # noqa: F401, E402
 import tools.google  # noqa: F401, E402
 import tools.diagnostics  # noqa: F401, E402
@@ -103,7 +105,8 @@ app = Starlette(
         Route("/.well-known/oauth-authorization-server", authorization_server_metadata, methods=["GET"]),
         Route("/.well-known/oauth-protected-resource", protected_resource_metadata, methods=["GET"]),
         Route("/register", oauth_register, methods=["POST"]),
-        Route("/authorize", authorize, methods=["GET", "POST"]),
+        Route("/authorize", authorize, methods=["GET"]),
+        Route("/authorize/bridge", authorize_bridge, methods=["GET"]),
         Route("/token", oauth_token, methods=["POST"]),
         Route("/connect/microsoft", connect_microsoft, methods=["GET", "POST"]),
         Route("/connect/microsoft/callback", connect_microsoft_callback, methods=["GET"]),

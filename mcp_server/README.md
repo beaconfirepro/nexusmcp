@@ -86,6 +86,8 @@ The app reads ALL static secrets from environment variables (see `.env.example`)
 | `CONNECTEAM_KEY` | Connecteam API key (sent as `X-API-KEY` header) |
 | `HUBSPOT_MAIN` | HubSpot private-app access token |
 | `HELM_API_KEY` | Helm Public API key (`helm_...`), made in Helm Tenant Admin > API keys. Its scopes decide what the `helm_*` tools may read and write |
+| `NEXUS_APP_URL` | The Nexus web app (Base44), e.g. `https://nexus-beacon.base44.app`. The owner signs in there to approve an AI client or a Microsoft connection, and the server reads added APIs from it |
+| `NEXUS_BRIDGE_SECRET` | Shared with the Base44 app (same value in its secrets). Signs sign-in approvals and guards its `nexusApiConnections` function |
 | `HELM_BASE_URL` | The Helm deploy to call, e.g. `https://helm.beaconfire.co` (production) or `https://dev.takesthehelm.com` |
 | `QBO_CLIENT_ID` | QuickBooks OAuth client ID |
 | `QBO_CLIENT_SECRET` | QuickBooks OAuth client secret |
@@ -213,8 +215,8 @@ No local scripts needed. Once, add this **Web** redirect URI to the Entra app
 registration: `<MCP_BASE_URL>/connect/microsoft/callback`.
 
 Then for each account, open `<MCP_BASE_URL>/connect/microsoft`, enter an alias
-(e.g. `work2`) and the `OWNER_LOGIN_PASSWORD`, and sign in with that Microsoft
-account (the picker is always shown). The refresh token is stored as
+(e.g. `work2`), approve it on the Nexus web app (signed in as an admin), and sign in
+with that Microsoft account (the picker is always shown). The refresh token is stored as
 `microsoft:<alias>`; pass `account="microsoft:work2"` to `outlook_*` /
 `sharepoint_*` / `graph_request`. Re-running with an existing alias re-authorizes it.
 The accounts must be in the tenant set by `TENANT_ID`.
@@ -526,6 +528,10 @@ Creates, updates, deletes, bulk loads and actions go through `helm_request`, wit
 
 **Google Calendar** (7): `gcal_list_calendars`, `gcal_list_events`, `gcal_get_event`,
 `gcal_create_event`, `gcal_update_event`, `gcal_delete_event`, `gcal_get_free_busy`
+
+**Custom APIs** (2): `api_list_connections`, `api_request`. These call any API an admin
+adds with "Add an API" in the Nexus web app, using its stored key. The server reads the
+connections from the app on each call, so a new API works with no redeploy.
 
 **Diagnostics** (1): `check_provider_connectivity`
 
