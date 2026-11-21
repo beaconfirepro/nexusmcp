@@ -34,6 +34,18 @@ ACCESS_READ_WRITE = "read_write"
 ACCESS_MODES = (ACCESS_READ_ONLY, ACCESS_READ_WRITE)
 DEFAULT_ACCESS_MODE = ACCESS_READ_WRITE
 
+# Names for connections that were seeded before accounts carried a name, so the
+# original account reads as something meaningful instead of "main".
+_LEGACY_NAMES = {
+    ("qbo", "main"): "QuickBooks: DEV",
+}
+
+
+def account_name(provider: str, alias: str, stored: str | None) -> str:
+    """The name an account is shown and addressed by: its saved name, else the
+    legacy label for a pre-named connection, else the alias."""
+    return stored or _LEGACY_NAMES.get((provider, alias), alias)
+
 
 class TokenStore:
     """Read+write rotating OAuth tokens from Azure Table Storage."""
@@ -160,7 +172,7 @@ class TokenStore:
             return [
                 {
                     "alias": e["RowKey"],
-                    "name": e.get("name") or e["RowKey"],
+                    "name": account_name(provider, e["RowKey"], e.get("name")),
                     "access_mode": e.get("access_mode") or DEFAULT_ACCESS_MODE,
                     "realm_id": e.get("realm_id"),
                 }
