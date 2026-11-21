@@ -13,14 +13,45 @@ The escape-hatch (qbo_request) covers any endpoint not explicitly typed.
 """
 from pydantic import Field
 
-from src.clients import get_client, resolve_account
+from src.clients import get_client, list_accounts, resolve_qbo_account
 from src.mcp_instance import DESTRUCTIVE, IDEMPOTENT, RO, WRITE, mcp
 from src.models import BaseToolInput, DryRunInput
+from src.token_store import ACCESS_READ_ONLY
+
+
+class QboBaseInput(BaseToolInput):
+    """QuickBooks tool input. `account` is the account's saved name or its alias."""
+
+    account: str | None = Field(
+        default=None,
+        description="QuickBooks account, by the name saved in Nexus → Accounts "
+                    "(e.g. 'Acme Books') or by alias (e.g. 'qbo:acme-books'). "
+                    "Call qbo_list_accounts for the names and each account's access. "
+                    "Required when more than one account is connected.",
+        examples=["Acme Books", "qbo:acme-books"],
+    )
+
+
+# ── Accounts ──
+
+@mcp.tool(annotations=RO,
+          description="List the QuickBooks accounts connected to Nexus: the name to pass as "
+                      "`account`, its alias, and whether it is read only or read and write. "
+                      "Call this when you need to know which accounts exist.")
+async def qbo_list_accounts() -> str:
+    accounts = list_accounts("qbo")
+    if not accounts:
+        return "No QuickBooks accounts are connected. Add one in Nexus → Accounts."
+    lines = ["| Name | account | Access |", "| --- | --- | --- |"]
+    for a in accounts:
+        access = "read only" if a["access_mode"] == ACCESS_READ_ONLY else "read and write"
+        lines.append(f"| {a['name']} | {a['alias']} | {access} |")
+    return "\n".join(lines)
 
 
 # ── Query (read) ──
 
-class QboQueryInput(BaseToolInput):
+class QboQueryInput(QboBaseInput):
     entity: str = Field(
         description="QBO entity name (e.g. Invoice, Customer, Item, Bill, Payment, "
                     "Account, JournalEntry, Vendor, Estimate, CreditMemo, Purchase, SalesReceipt).",
@@ -40,7 +71,7 @@ class QboQueryInput(BaseToolInput):
                       "Returns paginated results.")
 async def qbo_query(input: QboQueryInput) -> str:
     client = get_client("qbo")
-    alias = resolve_account("qbo", input.account)
+    alias = resolve_qbo_account(input.account)
     result = await client.query_entity(input.entity, alias, where=input.where,
                                        limit=input.limit, offset=input.offset)
     return client.format(result, input.response_format)
@@ -48,7 +79,7 @@ async def qbo_query(input: QboQueryInput) -> str:
 
 # ── Get by ID ──
 
-class QboGetEntityInput(BaseToolInput):
+class QboGetEntityInput(QboBaseInput):
     entity: str = Field(description="Entity name (e.g. Invoice, Customer).", examples=["Invoice"])
     entity_id: str = Field(description="Entity ID.", examples=["123"])
 
@@ -56,14 +87,14 @@ class QboGetEntityInput(BaseToolInput):
 @mcp.tool(annotations=RO, description="Get a single QBO entity by ID.")
 async def qbo_get_entity(input: QboGetEntityInput) -> str:
     client = get_client("qbo")
-    alias = resolve_account("qbo", input.account)
+    alias = resolve_qbo_account(input.account)
     result = await client.get_entity(input.entity, input.entity_id, alias)
     return client.format(result, input.response_format)
 
 
 # ── Create ──
 
-class QboCreateEntityInput(BaseToolInput, DryRunInput):
+class QboCreateEntityInput(QboBaseInput, DryRunInput):
     entity: str = Field(description="Entity name (e.g. Invoice, Customer, Item, Payment).",
                         examples=["Invoice"])
     data: dict = Field(description="Entity object per QBO API schema.", examples=[{
@@ -78,7 +109,7 @@ class QboCreateEntityInput(BaseToolInput, DryRunInput):
                       "Use dry_run=true to validate without creating.")
 async def qbo_create_entity(input: QboCreateEntityInput) -> str:
     client = get_client("qbo")
-    alias = resolve_account("qbo", input.account)
+    alias = resolve_qbo_account(input.account)
     if input.dry_run:
         return f"[DRY RUN] Would create {input.entity}: {input.data}"
     result = await client.create_entity(input.entity, input.data, alias)
@@ -87,7 +118,7 @@ async def qbo_create_entity(input: QboCreateEntityInput) -> str:
 
 # ── Update ──
 
-class QboUpdateEntityInput(BaseToolInput, DryRunInput):
+class QboUpdateEntityInput(QboBaseInput, DryRunInput):
     entity: str = Field(description="Entity name.", examples=["Invoice"])
     entity_id: str = Field(description="Entity ID to update.", examples=["123"])
     data: dict = Field(description="Updated fields. Must include SyncToken for QBO updates.",
@@ -98,7 +129,7 @@ class QboUpdateEntityInput(BaseToolInput, DryRunInput):
           description="Update a QBO entity. Requires SyncToken in the data. Use dry_run=true to validate.")
 async def qbo_update_entity(input: QboUpdateEntityInput) -> str:
     client = get_client("qbo")
-    alias = resolve_account("qbo", input.account)
+    alias = resolve_qbo_account(input.account)
     if input.dry_run:
         return f"[DRY RUN] Would update {input.entity}/{input.entity_id}: {input.data}"
     result = await client.update_entity(input.entity, input.entity_id, input.data, alias)
@@ -107,7 +138,7 @@ async def qbo_update_entity(input: QboUpdateEntityInput) -> str:
 
 # ── Delete ──
 
-class QboDeleteEntityInput(BaseToolInput, DryRunInput):
+class QboDeleteEntityInput(QboBaseInput, DryRunInput):
     entity: str = Field(description="Entity name.", examples=["Invoice"])
     entity_id: str = Field(description="Entity ID to delete.", examples=["123"])
     confirm: bool = Field(default=False, description="Must be true to execute.")
@@ -119,7 +150,7 @@ async def qbo_delete_entity(input: QboDeleteEntityInput) -> str:
     if not input.confirm:
         return "Deletion requires confirm=true. Re-run with confirm=true to proceed."
     client = get_client("qbo")
-    alias = resolve_account("qbo", input.account)
+    alias = resolve_qbo_account(input.account)
     if input.dry_run:
         return f"[DRY RUN] Would delete {input.entity}/{input.entity_id}"
     result = await client.delete_entity(input.entity, input.entity_id, alias)
@@ -128,7 +159,7 @@ async def qbo_delete_entity(input: QboDeleteEntityInput) -> str:
 
 # ── Reports ──
 
-class QboGetReportInput(BaseToolInput):
+class QboGetReportInput(QboBaseInput):
     report_name: str = Field(
         description="Report name (e.g. ProfitAndLoss, BalanceSheet, CashFlow, "
                     "AgedReceivables, AgedPayables, CustomerIncome, TrialBalance).",
@@ -144,14 +175,14 @@ class QboGetReportInput(BaseToolInput):
 @mcp.tool(annotations=RO, description="Get a QBO report (P&L, balance sheet, cash flow, etc.).")
 async def qbo_get_report(input: QboGetReportInput) -> str:
     client = get_client("qbo")
-    alias = resolve_account("qbo", input.account)
+    alias = resolve_qbo_account(input.account)
     result = await client.get_report(input.report_name, alias, params=input.params)
     return client.format(result, input.response_format)
 
 
 # ── Escape-hatch ──
 
-class QboRequestInput(BaseToolInput):
+class QboRequestInput(QboBaseInput):
     method: str = Field(description="HTTP method.", examples=["GET", "POST"])
     path: str = Field(description="Full API path after base URL (e.g. /v3/company/{realmId}/invoice).",
                       examples=["/v3/company/12345/invoice"])
@@ -164,7 +195,7 @@ class QboRequestInput(BaseToolInput):
                       "Authenticates with the resolved account's OAuth token automatically.")
 async def qbo_request(input: QboRequestInput) -> str:
     client = get_client("qbo")
-    alias = resolve_account("qbo", input.account)
+    alias = resolve_qbo_account(input.account)
     result = await client.generic_request(input.method, input.path, alias,
                                           query=input.query, body=input.body)
     return client.format(result, input.response_format)

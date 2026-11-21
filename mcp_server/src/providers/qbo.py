@@ -14,7 +14,7 @@ import logging
 from src.errors import ProviderError
 from src.oauth import OAuthConfig, OAuthHelper
 from src.providers.base import BaseProviderClient
-from src.token_store import TokenStore
+from src.token_store import ACCESS_READ_ONLY, TokenStore
 
 logger = logging.getLogger("mcp_server.providers.qbo")
 
@@ -44,6 +44,20 @@ class QboClient(BaseProviderClient):
             "Accept": "application/json",
             "Content-Type": "application/json",
         }
+
+    def _assert_can_write(self, alias: str):
+        """Read-only accounts refuse every mutating call — enforced here, not in prompts."""
+        record = self._store.get_token_record("qbo", alias) or {}
+        if record.get("access_mode") != ACCESS_READ_ONLY:
+            return
+        label = record.get("name") or alias
+        raise ProviderError(
+            f"QuickBooks account '{label}' (qbo:{alias}) is read-only: it cannot create, "
+            f"update or delete records.",
+            provider="qbo",
+            status_code=403,
+            hint="Use a read/write account, or switch this account to read and write in Nexus → Accounts.",
+        )
 
     def _realm_id(self, alias: str) -> str:
         realm_id = self._store.get_realm_id("qbo", alias)
@@ -88,6 +102,7 @@ class QboClient(BaseProviderClient):
         )
 
     async def create_entity(self, entity: str, data: dict, alias: str) -> dict:
+        self._assert_can_write(alias)
         return await self.request(
             "POST", self._path(alias, entity),
             headers=await self._headers(alias),
@@ -97,6 +112,7 @@ class QboClient(BaseProviderClient):
 
     async def update_entity(self, entity: str, entity_id: str, data: dict, alias: str) -> dict:
         # QBO updates require full entity with SyncToken — caller must provide it
+        self._assert_can_write(alias)
         data.setdefault("Id", entity_id)
         return await self.request(
             "POST", self._path(alias, entity),
@@ -107,6 +123,7 @@ class QboClient(BaseProviderClient):
 
     async def delete_entity(self, entity: str, entity_id: str, alias: str) -> dict:
         # QBO delete is an operation on the entity endpoint
+        self._assert_can_write(alias)
         return await self.request(
             "POST", self._path(alias, entity),
             headers=await self._headers(alias),
@@ -131,6 +148,8 @@ class QboClient(BaseProviderClient):
         query: dict | None = None, body: dict | None = None,
     ) -> dict | list | str:
         """Call ANY QBO endpoint. path should include /v3/company/{realmId}/... or start after base URL."""
+        if method.upper() not in ("GET", "HEAD"):
+            self._assert_can_write(alias)
         return await self.request(
             method, path,
             headers=await self._headers(alias),

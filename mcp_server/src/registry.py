@@ -14,7 +14,7 @@ Google tools (gmail_*, gcal_*) resolve to a google:* login.
 """
 import logging
 
-from src.errors import UnknownAliasError
+from src.errors import ProviderError, UnknownAliasError
 from src.token_store import TokenStore
 
 logger = logging.getLogger("mcp_server.registry")
@@ -102,10 +102,52 @@ class AccountRegistry:
         # Validate exists
         if provider in ("qbo", "microsoft", "google"):
             record = self._store.get_token_record(provider, alias)
+            if not record and provider == "qbo":
+                # QuickBooks accounts are also addressed by their saved name.
+                matched = self._match_name(provider, alias)
+                if matched:
+                    alias = matched
+                    record = self._store.get_token_record(provider, alias)
             if not record:
-                valid = self._store.list_aliases(provider)
-                if not valid:
-                    valid = [DEFAULT_ALIASES.get(provider, "").split(":")[-1]]
-                raise UnknownAliasError(account, provider, valid)
+                raise UnknownAliasError(account, provider, self._valid_labels(provider))
 
         return alias
+
+    # ── Named accounts ──
+
+    def list_accounts(self, provider: str) -> list[dict]:
+        """Every account for a provider: alias, admin-assigned name, access mode."""
+        return self._store.list_accounts(provider)
+
+    def _match_name(self, provider: str, value: str) -> str | None:
+        """Find an account by its saved name (case-insensitive) or alias."""
+        needle = value.strip().lower()
+        for acct in self.list_accounts(provider):
+            if acct["alias"].lower() == needle or acct["name"].strip().lower() == needle:
+                return acct["alias"]
+        return None
+
+    def _valid_labels(self, provider: str) -> list[str]:
+        """Labels an agent can pass, shown in the unknown-account error."""
+        accounts = self.list_accounts(provider)
+        if not accounts:
+            return [DEFAULT_ALIASES.get(provider, "").split(":")[-1]]
+        return [f"{a['name']} ({provider}:{a['alias']})" for a in accounts]
+
+    def resolve_qbo_account(self, account: str | None) -> str:
+        """QuickBooks: an agent picks the account by name. A single connected
+        account is used automatically; several require an explicit choice."""
+        if account:
+            return self.resolve_alias_simple("qbo", account)
+
+        aliases = self._store.list_aliases("qbo")
+        if len(aliases) <= 1:
+            return aliases[0] if aliases else DEFAULT_ALIASES["qbo"].split(":")[-1]
+
+        raise ProviderError(
+            "Several QuickBooks accounts are connected. Choose one by name: "
+            + ", ".join(self._valid_labels("qbo"))
+            + ".",
+            provider="qbo",
+            hint="Pass the account's name (or its alias) as the account argument.",
+        )

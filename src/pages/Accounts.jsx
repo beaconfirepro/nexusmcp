@@ -7,19 +7,27 @@ import AddAccountDialog from '@/components/accounts/AddAccountDialog';
 const PROVIDERS = [
   { key: 'microsoft', title: 'Microsoft', subtitle: 'Outlook + SharePoint', addable: true },
   { key: 'google', title: 'Google', subtitle: 'Gmail + Calendar' },
-  { key: 'qbo', title: 'QuickBooks', subtitle: 'QuickBooks Online' },
+  { key: 'qbo', title: 'QuickBooks', subtitle: 'QuickBooks Online', addable: true },
   { key: 'hubspot', title: 'HubSpot', subtitle: 'HubSpot CRM' },
   { key: 'helm', title: 'Helm', subtitle: 'Helm Public API v1' },
 ];
 
 export default function Accounts() {
   const [providers, setProviders] = useState({});
+  const [baseUrl, setBaseUrl] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [dialogOpen, setDialogOpen] = useState(false);
+  const [dialogProvider, setDialogProvider] = useState(null);
 
   useEffect(() => {
     let active = true;
+
+    base44.functions
+      .invoke('mcpConfig', {})
+      .then((resp) => {
+        if (active) setBaseUrl((resp.data?.mcp_base_url || '').replace(/\/+$/, ''));
+      })
+      .catch(() => {});
 
     (async () => {
       try {
@@ -49,6 +57,17 @@ export default function Accounts() {
       active = false;
     };
   }, []);
+
+  const handleRemove = (providerKey, alias) => {
+    if (!baseUrl) return;
+    const confirmed = window.confirm(
+      `Remove ${providerKey}:${alias}? Its stored credentials are deleted.`
+    );
+    if (!confirmed) return;
+    window.location.href = `${baseUrl}/accounts/remove?provider=${providerKey}&alias=${encodeURIComponent(
+      alias
+    )}`;
+  };
 
   return (
     <div className="max-w-2xl space-y-6">
@@ -83,16 +102,19 @@ export default function Accounts() {
               subtitle={subtitle}
               accounts={providers[key]?.accounts}
               addDisabled={!addable}
-              onAdd={addable ? () => setDialogOpen(true) : undefined}
+              onAdd={addable ? () => setDialogProvider(key) : undefined}
+              onRemove={baseUrl ? (alias) => handleRemove(key, alias) : undefined}
             />
           ))}
         </div>
       )}
 
       <AddAccountDialog
-        open={dialogOpen}
-        onOpenChange={setDialogOpen}
-        providerKey="microsoft"
+        open={dialogProvider !== null}
+        onOpenChange={(open) => {
+          if (!open) setDialogProvider(null);
+        }}
+        provider={dialogProvider || 'microsoft'}
       />
     </div>
   );

@@ -27,6 +27,13 @@ from src.config import Settings
 
 logger = logging.getLogger("mcp_server.token_store")
 
+# Access mode an admin assigns to an account. Read-only accounts refuse every
+# mutating call server-side; accounts without a mode keep their old behaviour.
+ACCESS_READ_ONLY = "read_only"
+ACCESS_READ_WRITE = "read_write"
+ACCESS_MODES = (ACCESS_READ_ONLY, ACCESS_READ_WRITE)
+DEFAULT_ACCESS_MODE = ACCESS_READ_WRITE
+
 
 class TokenStore:
     """Read+write rotating OAuth tokens from Azure Table Storage."""
@@ -84,8 +91,14 @@ class TokenStore:
         access_token: str | None = None,
         expires_in: int | None = None,
         realm_id: str | None = None,
+        name: str | None = None,
+        access_mode: str | None = None,
     ):
-        """Persist a (possibly rotated) refresh token + cached access token."""
+        """Persist a (possibly rotated) refresh token + cached access token.
+
+        `name` and `access_mode` are the admin's label and permission for the
+        account. The upsert merges, so a token refresh (which passes neither)
+        never clears them."""
         now = datetime.now(timezone.utc).isoformat()
         entity = {
             "PartitionKey": provider,
@@ -101,6 +114,10 @@ class TokenStore:
             entity["expires_at"] = expiry
         if realm_id:
             entity["realm_id"] = realm_id
+        if name:
+            entity["name"] = name
+        if access_mode:
+            entity["access_mode"] = access_mode
 
         self._get_client().upsert_entity(entity)
         logger.info("Persisted token for %s:%s", provider, alias)
@@ -132,3 +149,31 @@ class TokenStore:
             return [e["RowKey"] for e in entities]
         except Exception:
             return []
+
+    def list_accounts(self, provider: str) -> list[dict]:
+        """Every account for a provider with its admin-assigned name and access mode."""
+        try:
+            entities = self._get_client().query_entities(
+                query_filter=f"PartitionKey eq '{provider}'",
+                select=["RowKey", "name", "access_mode", "realm_id"],
+            )
+            return [
+                {
+                    "alias": e["RowKey"],
+                    "name": e.get("name") or e["RowKey"],
+                    "access_mode": e.get("access_mode") or DEFAULT_ACCESS_MODE,
+                    "realm_id": e.get("realm_id"),
+                }
+                for e in entities
+            ]
+        except Exception:
+            return []
+
+    def delete_token(self, provider: str, alias: str) -> bool:
+        """Remove an account's stored credentials. True when a record was deleted."""
+        try:
+            self._get_client().delete_entity(partition_key=provider, row_key=alias)
+            return True
+        except Exception:
+            logger.warning("No token record to delete for %s:%s", provider, alias)
+            return False

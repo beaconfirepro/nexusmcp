@@ -54,6 +54,22 @@ def resolve_account(provider: str, account: str | None) -> str:
     return _registry.resolve_alias_simple(provider, account)
 
 
+def resolve_qbo_account(account: str | None) -> str:
+    """QuickBooks account by saved name or alias; several accounts need a choice."""
+    global _registry
+    if _registry is None:
+        _registry = AccountRegistry(_token_store)
+    return _registry.resolve_qbo_account(account)
+
+
+def list_accounts(provider: str) -> list[dict]:
+    """Named accounts for a provider (alias, name, access mode)."""
+    global _registry
+    if _registry is None:
+        _registry = AccountRegistry(_token_store)
+    return _registry.list_accounts(provider)
+
+
 def init_clients(settings: Settings):
     """Initialize all provider clients. Called once at startup."""
     global _token_store, _oauth_helper, _registry

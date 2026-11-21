@@ -36,6 +36,7 @@ from src.oauth_routes import (
     token as oauth_token,
 )
 from src.connect_routes import connect_microsoft, connect_microsoft_callback
+from src.account_routes import connect_qbo, connect_qbo_callback, remove_account
 from src.bridge_routes import authorize_bridge
 from src.status import get_all_provider_status
 
@@ -110,6 +111,9 @@ app = Starlette(
         Route("/token", oauth_token, methods=["POST"]),
         Route("/connect/microsoft", connect_microsoft, methods=["GET", "POST"]),
         Route("/connect/microsoft/callback", connect_microsoft_callback, methods=["GET"]),
+        Route("/connect/qbo", connect_qbo, methods=["GET", "POST"]),
+        Route("/connect/qbo/callback", connect_qbo_callback, methods=["GET"]),
+        Route("/accounts/remove", remove_account, methods=["GET"]),
         Mount("/", app=mcp_app),
     ],
     lifespan=mcp_app.router.lifespan_context,

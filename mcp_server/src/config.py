@@ -83,6 +83,10 @@ class Settings:
         return "https://oauth.platform.intuit.com/oauth2/v1/tokens/bearer"
 
     @property
+    def qbo_auth_url(self) -> str:
+        return "https://appcenter.intuit.com/connect/oauth2"
+
+    @property
     def graph_base_url(self) -> str:
         return "https://graph.microsoft.com/v1.0"
 

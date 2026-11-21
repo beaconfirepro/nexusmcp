@@ -39,6 +39,9 @@ _OPEN_PATHS = frozenset({
     "/token",
     "/connect/microsoft",
     "/connect/microsoft/callback",
+    "/connect/qbo",
+    "/connect/qbo/callback",
+    "/accounts/remove",
 })
 
 

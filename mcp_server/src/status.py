@@ -17,6 +17,7 @@ import httpx
 
 from src.clients import get_client, get_oauth_config, get_oauth_helper, get_token_store
 from src.config import Settings
+from src.token_store import DEFAULT_ACCESS_MODE
 
 logger = logging.getLogger("mcp_server.status")
 
@@ -158,6 +159,8 @@ async def _check_account(provider: str, alias: str, settings: Settings) -> dict:
     record = _get_record(provider, alias)
     seeded = True if provider not in OAUTH_PROVIDERS else bool(record and record.get("refresh_token"))
     expires_at = record.get("expires_at") if record else None
+    name = (record or {}).get("name") or alias
+    access_mode = (record or {}).get("access_mode") or DEFAULT_ACCESS_MODE
 
     reachable = False
     error: str | None = None
@@ -174,6 +177,8 @@ async def _check_account(provider: str, alias: str, settings: Settings) -> dict:
             scopes = await _get_scopes(provider, alias)
 
     return {
+        "name": name,
+        "access_mode": access_mode,
         "configured": configured,
         "seeded": seeded,
         "reachable": reachable,

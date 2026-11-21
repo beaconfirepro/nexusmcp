@@ -8,6 +8,7 @@ import logging
 from starlette.requests import Request
 from starlette.responses import HTMLResponse
 
+from src.account_routes import finish_remove_account, start_qbo_sign_in
 from src.bridge import BridgeError, verify_assertion, verify_request
 from src.connect_routes import start_microsoft_sign_in
 from src.oauth_routes import deny_authorize, finish_authorize
@@ -45,4 +46,8 @@ async def authorize_bridge(request: Request):
         return finish_authorize(claims["params"], owner=approval["sub"])
     if claims["kind"] == "connect_microsoft":
         return start_microsoft_sign_in(request, claims["alias"])
+    if claims["kind"] == "connect_qbo":
+        return start_qbo_sign_in(request, claims["alias"], claims["name"], claims["mode"])
+    if claims["kind"] == "remove_account":
+        return finish_remove_account(request, claims["provider"], claims["alias"])
     raise BridgeError(f"unknown request kind {claims['kind']!r}")
